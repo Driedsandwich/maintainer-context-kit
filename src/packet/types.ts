@@ -19,9 +19,17 @@ export type PreflightResult = {
   limitation: string;
 };
 
+export type GitHubSourceProvenance = {
+  sourceType: 'issue' | 'pull_request';
+  repository: string;
+  number: number;
+  canonicalUrl: string;
+};
+
 export type MaintainerTaskPacket = {
   kind: PacketKind;
   source: string;
+  sourceProvenance?: GitHubSourceProvenance;
   generatedAt: string;
   toolVersion: string;
   maintainerGoal: string;

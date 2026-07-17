@@ -8,7 +8,13 @@ function buildPacket(): MaintainerTaskPacket {
   const preflight = runPreflight('Synthetic content with demo.user@example.test only.', '2026-07-02T00:00:00.000Z');
   return {
     kind: 'triage',
-    source: 'example/repo#123',
+    source: 'example/repo issue #123',
+    sourceProvenance: {
+      sourceType: 'issue',
+      repository: 'example/repo',
+      number: 123,
+      canonicalUrl: 'https://github.com/example/repo/issues/123',
+    },
     generatedAt: '2026-07-02T00:00:00.000Z',
     toolVersion: '0.0.0',
     maintainerGoal: 'Decide whether the issue is actionable.',
@@ -31,7 +37,8 @@ function buildPacket(): MaintainerTaskPacket {
 test('renderer includes required packet sections and safety wording', () => {
   const markdown = renderMaintainerTaskPacket(buildPacket());
 
-  assert.match(markdown, /# Maintainer Task Packet: triage - example\/repo#123/);
+  assert.match(markdown, /# Maintainer Task Packet: triage - example\/repo issue #123/);
+  assert.match(markdown, /## 3\. Source\n\n- Source type: issue\n- Repository: example\/repo\n- Number: #123\n- Canonical URL: https:\/\/github\.com\/example\/repo\/issues\/123/);
   assert.match(markdown, /## 1\. Maintainer Goal/);
   assert.match(markdown, /## 10\. Secret\/PII Preflight Result/);
   assert.match(markdown, /## 15\. Known Limitations/);
