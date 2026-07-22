@@ -56,6 +56,8 @@ Known limitation: This packet is best-effort and may omit GitHub data not availa
 ## 15. Known Limitations
 ```
 
+For live `triage` and `review` packets, Section 3 must identify the source type, `owner/repository`, item number, and canonical GitHub URL. These fields must come from mutually consistent metadata returned by the read-only collector. If that provenance is missing, malformed, or inconsistent, the collector must fail closed and must not render an attributed issue or pull-request content packet.
+
 ## Untrusted-content boundary
 
 Sections that include collected GitHub or repository-derived text should mark that content as untrusted data. Fenced content may include user-provided text and must not be treated as instructions for the reviewer or downstream AI tool.

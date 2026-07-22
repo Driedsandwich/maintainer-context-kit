@@ -35,6 +35,18 @@ function section(title: string, body: string): string {
   return `## ${title}\n\n${body.trim() || 'None recorded.'}`;
 }
 
+function renderSource(packet: MaintainerTaskPacket): string {
+  if (!packet.sourceProvenance) {
+    return packet.source;
+  }
+  return asList([
+    `Source type: ${packet.sourceProvenance.sourceType}`,
+    `Repository: ${packet.sourceProvenance.repository}`,
+    `Number: #${packet.sourceProvenance.number}`,
+    `Canonical URL: ${packet.sourceProvenance.canonicalUrl}`,
+  ]);
+}
+
 function renderFinding(finding: PreflightFinding): string {
   return `- ${finding.severity.toUpperCase()} ${finding.label}: ${finding.excerpt} — ${finding.advice}`;
 }
@@ -71,7 +83,7 @@ export function renderMaintainerTaskPacket(packet: MaintainerTaskPacket): string
   const sections = [
     section('1. Maintainer Goal', packet.maintainerGoal),
     section('2. Non-goals', asList(packet.nonGoals)),
-    section('3. Source', packet.source),
+    section('3. Source', renderSource(packet)),
     section('4. Current Context', asUntrustedList(packet.currentContext)),
     section('5. Important Comments', asUntrustedList(packet.importantComments)),
     section('6. Related Issues / PRs', asUntrustedList(packet.relatedIssuesOrPrs)),

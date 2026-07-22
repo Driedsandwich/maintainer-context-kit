@@ -5,6 +5,7 @@ import type { MaintainerTaskPacket } from '../packet/types.ts';
 import { parseJsonObject } from '../utils/safeJson.ts';
 import { runReadOnlyCommand, type ReadOnlyCommandResult, type ReadOnlyCommandRunner } from '../shell/runReadOnlyCommand.ts';
 import { buildRepositoryVerificationSteps, targetMatchesLocalGitHubRepository, UNCONFIRMED_REPOSITORY_VERIFICATION } from './repositoryVerificationPlan.ts';
+import { resolveGitHubSourceProvenance, sourceLabel, validateExplicitSourceTarget } from './sourceProvenance.ts';
 
 export type TriageOptions = {
   cwd?: string;
@@ -124,10 +125,11 @@ function commentSummaries(comments: IssueView['comments']): string[] {
 function buildFailurePacket(target: string, result: ReadOnlyCommandResult & { name: string; command: string }, generatedAt: string): MaintainerTaskPacket {
   const failureText = summarizeCommand(result);
   const preflight = runPreflight(failurePreflightText(target, result), generatedAt);
+  const safeTarget = redactSensitiveText(target).replace(/\s+/g, ' ').trim().slice(0, 240) || 'unknown';
 
   return {
     kind: 'triage',
-    source: `issue/${redactSensitiveText(target)}`,
+    source: `issue/${safeTarget}`,
     generatedAt,
     toolVersion: VERSION,
     maintainerGoal: 'Determine why issue context could not be collected and what local prerequisite is missing.',
@@ -198,6 +200,14 @@ export function buildIssueTriagePacket(target: string, options: TriageOptions = 
   }
 
   const issue = parsed.value;
+  const provenance = resolveGitHubSourceProvenance('issue', issue.url, issue.number);
+  if (!provenance.ok) {
+    return buildFailurePacket(target, { ...result, ok: false, stderr: `Source provenance validation failed: ${provenance.error}.` }, generatedAt);
+  }
+  const targetValidation = validateExplicitSourceTarget(target, provenance.value);
+  if (!targetValidation.ok) {
+    return buildFailurePacket(target, { ...result, ok: false, stderr: `Source provenance validation failed: ${targetValidation.error}.` }, generatedAt);
+  }
   const gitRoot = run('git root', ['git', 'rev-parse', '--show-toplevel'], runCommand, cwd);
   const gitRemotes = run('git remotes', ['git', 'remote', '-v'], runCommand, cwd);
   const rawText = [
@@ -211,7 +221,7 @@ export function buildIssueTriagePacket(target: string, options: TriageOptions = 
   const preflight = runPreflight(rawText, generatedAt);
   const title = redactSensitiveText(issue.title ?? '(untitled)');
   const author = issue.author?.login ? redactSensitiveText(issue.author.login) : 'unknown';
-  const source = issue.number ? `issue #${issue.number}` : `issue/${redactSensitiveText(target)}`;
+  const source = sourceLabel(provenance.value);
   const localRepositoryConfirmed = gitRoot.ok
     && gitRemotes.ok
     && targetMatchesLocalGitHubRepository(issue.url, gitRemotes.stdout);
@@ -220,6 +230,7 @@ export function buildIssueTriagePacket(target: string, options: TriageOptions = 
   return {
     kind: 'triage',
     source,
+    sourceProvenance: provenance.value,
     generatedAt,
     toolVersion: VERSION,
     maintainerGoal: 'Decide whether the issue is actionable, what information is missing, and the next smallest safe maintainer action.',

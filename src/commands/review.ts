@@ -5,6 +5,7 @@ import type { MaintainerTaskPacket } from '../packet/types.ts';
 import { parseJsonObject } from '../utils/safeJson.ts';
 import { runReadOnlyCommand, type ReadOnlyCommandResult, type ReadOnlyCommandRunner } from '../shell/runReadOnlyCommand.ts';
 import { buildRepositoryVerificationSteps, targetMatchesLocalGitHubRepository, UNCONFIRMED_REPOSITORY_VERIFICATION } from './repositoryVerificationPlan.ts';
+import { resolveGitHubSourceProvenance, sourceLabel, validateExplicitSourceTarget } from './sourceProvenance.ts';
 
 export type ReviewOptions = { cwd?: string; generatedAt?: string; runCommand?: ReadOnlyCommandRunner };
 
@@ -96,9 +97,10 @@ function failurePreflightText(target: string, result: ReadOnlyCommandResult): st
 function buildFailurePacket(target: string, result: ReadOnlyCommandResult & { name: string }, generatedAt: string): MaintainerTaskPacket {
   const failureText = summarizeCommand(result);
   const preflight = runPreflight(failurePreflightText(target, result), generatedAt);
+  const safeTarget = redactSensitiveText(target).replace(/\s+/g, ' ').trim().slice(0, 240) || 'unknown';
   return {
     kind: 'review',
-    source: `pr/${redactSensitiveText(target)}`,
+    source: `pr/${safeTarget}`,
     generatedAt,
     toolVersion: VERSION,
     maintainerGoal: 'Determine why pull request context could not be collected and what prerequisite is missing.',
@@ -160,6 +162,14 @@ export function buildPullRequestReviewPacket(target: string, options: ReviewOpti
   if (!parsed.ok) return buildFailurePacket(target, { ...result, ok: false, stderr: parsed.error }, generatedAt);
 
   const pr = parsed.value;
+  const provenance = resolveGitHubSourceProvenance('pull_request', pr.url, pr.number);
+  if (!provenance.ok) {
+    return buildFailurePacket(target, { ...result, ok: false, stderr: `Source provenance validation failed: ${provenance.error}.` }, generatedAt);
+  }
+  const targetValidation = validateExplicitSourceTarget(target, provenance.value);
+  if (!targetValidation.ok) {
+    return buildFailurePacket(target, { ...result, ok: false, stderr: `Source provenance validation failed: ${targetValidation.error}.` }, generatedAt);
+  }
   const gitRoot = run('git root', ['git', 'rev-parse', '--show-toplevel'], runCommand, cwd);
   const gitRemotes = run('git remotes', ['git', 'remote', '-v'], runCommand, cwd);
   const rawText = [
@@ -177,7 +187,7 @@ export function buildPullRequestReviewPacket(target: string, options: ReviewOpti
   const fileSummaries = summarizeFiles(pr.files, pr.changedFiles);
   const title = redactSensitiveText(pr.title ?? '(untitled)');
   const author = pr.author?.login ? redactSensitiveText(pr.author.login) : 'unknown';
-  const source = pr.number ? `pr #${pr.number}` : `pr/${redactSensitiveText(target)}`;
+  const source = sourceLabel(provenance.value);
   const localRepositoryConfirmed = gitRoot.ok
     && gitRemotes.ok
     && targetMatchesLocalGitHubRepository(pr.url, gitRemotes.stdout);
@@ -186,6 +196,7 @@ export function buildPullRequestReviewPacket(target: string, options: ReviewOpti
   return {
     kind: 'review',
     source,
+    sourceProvenance: provenance.value,
     generatedAt,
     toolVersion: VERSION,
     maintainerGoal: 'Review the pull request shape, changed surface, risks, and verification plan without writing to GitHub.',

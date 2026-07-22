@@ -53,6 +53,7 @@ node src/cli.ts review <pull-request-number-or-url>
 ```
 
 Numeric issue and pull request targets use the current repository context. A full GitHub URL identifies the target explicitly.
+Live triage and review packets validate the URL returned by GitHub CLI and render the source type, repository, number, and canonical GitHub URL. Missing or inconsistent provenance fails closed as a collection-failure packet instead of producing an attributed content packet.
 
 ## Safety model
 

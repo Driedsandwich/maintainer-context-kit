@@ -15,7 +15,12 @@ function fail(argv: readonly string[], stderr: string): ReadOnlyCommandResult {
   return { argv: [...argv], allowed: true, ok: false, exitCode: 1, stdout: '', stderr, truncated: false, durationMs: 1, reason: 'test command allowed' };
 }
 
-function fakeIssueViewRunner(body: string, label = 'bug', repositoryRoot = process.cwd()): ReadOnlyCommandRunner {
+function fakeIssueViewRunner(
+  body: string,
+  label = 'bug',
+  repositoryRoot = process.cwd(),
+  sourceUrl = 'https://github.com/example/repo/issues/123',
+): ReadOnlyCommandRunner {
   return (argv) => {
     const key = argv.join(' ');
     if (key === 'gh issue view 123 --comments --json number,title,state,author,labels,body,comments,url,createdAt,updatedAt') {
@@ -29,7 +34,7 @@ function fakeIssueViewRunner(body: string, label = 'bug', repositoryRoot = proce
         comments: [{ author: { login: 'maintainer-demo' }, body: 'Can you share exact reproduction steps?', createdAt: '2026-07-02T00:00:00Z' }],
         createdAt: '2026-07-01T00:00:00Z',
         updatedAt: '2026-07-02T00:00:00Z',
-        url: 'https://github.com/example/repo/issues/123',
+        url: sourceUrl,
       }));
     }
     if (key === 'git rev-parse --show-toplevel') return ok(argv, `${repositoryRoot}\n`);
@@ -73,7 +78,13 @@ test('issue triage packet collects read-only issue details', () => {
   const packet = buildIssueTriagePacket('123', { cwd, generatedAt: '2026-07-02T00:00:00.000Z', runCommand: fakeIssueViewRunner(body, 'bug', cwd) });
 
   assert.equal(packet.kind, 'triage');
-  assert.equal(packet.source, 'issue #123');
+  assert.equal(packet.source, 'example/repo issue #123');
+  assert.deepEqual(packet.sourceProvenance, {
+    sourceType: 'issue',
+    repository: 'example/repo',
+    number: 123,
+    canonicalUrl: 'https://github.com/example/repo/issues/123',
+  });
   assert.equal(packet.preflight.status, 'pass');
   assert.ok(packet.currentContext.some((item) => item.includes('Synthetic issue cannot run command')));
   assert.ok(packet.importantComments.some((item) => item.includes('exact reproduction steps')));
@@ -113,6 +124,9 @@ test('issue triage does not reuse verification commands from a different local r
 
   const packet = buildIssueTriagePacket('https://github.com/example/other/issues/123', { cwd, runCommand: runner });
 
+  assert.equal(packet.source, 'example/other issue #123');
+  assert.equal(packet.sourceProvenance?.repository, 'example/other');
+  assert.equal(packet.sourceProvenance?.canonicalUrl, 'https://github.com/example/other/issues/123');
   assert.ok(packet.verificationPlan.includes('Use the target repository\'s documented verification commands; no local command was assumed.'));
   assert.equal(packet.verificationPlan.some((item) => item.startsWith('Run npm ')), false);
 });
@@ -150,6 +164,19 @@ test('issue triage collection failure returns a packet instead of throwing', () 
   const packet = buildIssueTriagePacket('999', { generatedAt: '2026-07-02T00:00:00.000Z', runCommand: runner });
 
   assert.equal(packet.kind, 'triage');
+  assert.equal(packet.sourceProvenance, undefined);
   assert.match(packet.currentContext[0], /unavailable or failed/);
+  assert.match(packet.codexTaskPrompt, /Do not implement from this packet/);
+});
+
+test('issue triage fails closed when returned provenance is invalid', () => {
+  const packet = buildIssueTriagePacket('123', {
+    generatedAt: '2026-07-02T00:00:00.000Z',
+    runCommand: fakeIssueViewRunner('Safe synthetic body.', 'bug', process.cwd(), 'https://github.com/example/repo/pull/123'),
+  });
+
+  assert.equal(packet.source, 'issue/123');
+  assert.equal(packet.sourceProvenance, undefined);
+  assert.match(packet.currentContext[0], /Source provenance validation failed/);
   assert.match(packet.codexTaskPrompt, /Do not implement from this packet/);
 });

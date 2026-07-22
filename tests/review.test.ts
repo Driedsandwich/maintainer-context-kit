@@ -13,7 +13,12 @@ function ok(argv: readonly string[], stdout: string): ReadOnlyCommandResult {
 function fail(argv: readonly string[], stderr: string): ReadOnlyCommandResult {
   return { argv: [...argv], allowed: true, ok: false, exitCode: 1, stdout: '', stderr, truncated: false, durationMs: 1, reason: 'test command allowed' };
 }
-function fakePrViewRunner(body: string, headRefName = 'feature-demo', repositoryRoot = process.cwd()): ReadOnlyCommandRunner {
+function fakePrViewRunner(
+  body: string,
+  headRefName = 'feature-demo',
+  repositoryRoot = process.cwd(),
+  sourceUrl = 'https://github.com/example/repo/pull/7',
+): ReadOnlyCommandRunner {
   return (argv) => {
     const key = argv.join(' ');
     if (key === 'gh pr view 7 --json number,title,state,author,isDraft,baseRefName,headRefName,mergeable,reviewDecision,additions,deletions,changedFiles,files,comments,reviews,statusCheckRollup,body,createdAt,updatedAt,url') {
@@ -35,7 +40,7 @@ function fakePrViewRunner(body: string, headRefName = 'feature-demo', repository
         reviews: [{ author: { login: 'reviewer-demo' }, state: 'COMMENTED', body: 'Looks small; verify docs match behavior.', submittedAt: '2026-07-02T00:00:00Z' }],
         statusCheckRollup: [{ name: 'sanity', conclusion: 'SUCCESS' }],
         body,
-        url: 'https://github.com/example/repo/pull/7',
+        url: sourceUrl,
         createdAt: '2026-07-01T00:00:00Z',
         updatedAt: '2026-07-02T00:00:00Z',
       }));
@@ -73,7 +78,13 @@ test('pull request review packet collects read-only PR details', () => {
   const cwd = repositoryFixture();
   const packet = buildPullRequestReviewPacket('7', { cwd, generatedAt: '2026-07-02T00:00:00.000Z', runCommand: fakePrViewRunner(body, 'feature-demo', cwd) });
   assert.equal(packet.kind, 'review');
-  assert.equal(packet.source, 'pr #7');
+  assert.equal(packet.source, 'example/repo pull request #7');
+  assert.deepEqual(packet.sourceProvenance, {
+    sourceType: 'pull_request',
+    repository: 'example/repo',
+    number: 7,
+    canonicalUrl: 'https://github.com/example/repo/pull/7',
+  });
   assert.equal(packet.preflight.status, 'pass');
   assert.ok(packet.currentContext.some((item) => item.includes('Synthetic PR adds read-only output')));
   assert.ok(packet.technicalSurface.some((item) => item.includes('src/cli.ts')));
@@ -112,6 +123,9 @@ test('pull request review does not reuse verification commands from a different 
 
   const packet = buildPullRequestReviewPacket('https://github.com/example/other/pull/7', { cwd, runCommand: runner });
 
+  assert.equal(packet.source, 'example/other pull request #7');
+  assert.equal(packet.sourceProvenance?.repository, 'example/other');
+  assert.equal(packet.sourceProvenance?.canonicalUrl, 'https://github.com/example/other/pull/7');
   assert.ok(packet.verificationPlan.includes('Use the target repository\'s documented verification commands; no local command was assumed.'));
   assert.equal(packet.verificationPlan.some((item) => item.startsWith('Run npm ')), false);
 });
@@ -137,5 +151,18 @@ test('pull request collection failure returns a packet instead of throwing', () 
   const runner: ReadOnlyCommandRunner = (argv) => fail(argv, 'could not resolve pull request');
   const packet = buildPullRequestReviewPacket('404', { generatedAt: '2026-07-02T00:00:00.000Z', runCommand: runner });
   assert.equal(packet.kind, 'review');
+  assert.equal(packet.sourceProvenance, undefined);
   assert.match(packet.currentContext[0], /unavailable or failed/);
+});
+
+test('pull request review fails closed when returned provenance is invalid', () => {
+  const packet = buildPullRequestReviewPacket('7', {
+    generatedAt: '2026-07-02T00:00:00.000Z',
+    runCommand: fakePrViewRunner('Safe synthetic body.', 'feature-demo', process.cwd(), 'https://github.com/example/repo/issues/7'),
+  });
+
+  assert.equal(packet.source, 'pr/7');
+  assert.equal(packet.sourceProvenance, undefined);
+  assert.match(packet.currentContext[0], /Source provenance validation failed/);
+  assert.match(packet.codexTaskPrompt, /Do not implement from this packet/);
 });
