@@ -106,16 +106,39 @@ test('rejects incomplete or ambiguous gh api argv', () => {
   }
 });
 
-test('allows selected read-only git commands', () => {
-  assert.equal(classifyCommand(['git', 'status', '--short']).allowed, true);
-  assert.equal(classifyCommand(['git', 'rev-parse', '--show-toplevel']).allowed, true);
-  assert.equal(classifyCommand(['git', 'log', '--oneline']).allowed, true);
+test('allows only the exact product Git command matrix', () => {
+  const allowed = [
+    ['git', 'version'],
+    ['git', 'rev-parse', '--show-toplevel'],
+    ['git', 'branch', '--show-current'],
+    ['git', 'status', '--short'],
+    ['git', 'remote', '-v'],
+  ];
+
+  for (const argv of allowed) {
+    assert.equal(classifyCommand(argv).allowed, true, argv.join(' '));
+  }
 });
 
 test('rejects git write or state-changing commands', () => {
   assert.equal(classifyCommand(['git', 'push']).allowed, false);
   assert.equal(classifyCommand(['git', 'commit', '-m', 'x']).allowed, false);
   assert.equal(classifyCommand(['git', 'checkout', '-b', 'x']).allowed, false);
+});
+
+test('rejects unneeded Git argument variants under otherwise read-only subcommands', () => {
+  const disallowed = [
+    ['git', 'branch', '-D', 'synthetic'],
+    ['git', 'remote', 'set-url', 'origin', 'https://example.invalid/repo.git'],
+    ['git', 'diff', '--output=synthetic.diff'],
+    ['git', 'status'],
+    ['git', 'remote'],
+    ['git', 'log', '--oneline'],
+  ];
+
+  for (const argv of disallowed) {
+    assert.equal(classifyCommand(argv).allowed, false, argv.join(' '));
+  }
 });
 
 test('assertReadOnlyCommand throws for disallowed commands', () => {

@@ -4,17 +4,12 @@ export type CommandDecision = {
   category?: string;
 };
 
-const READ_ONLY_GIT_SUBCOMMANDS = new Set([
-  'status',
-  'branch',
-  'remote',
-  'rev-parse',
-  'log',
-  'diff',
-  'show',
-  'ls-files',
-  'grep',
-  'version',
+const READ_ONLY_GIT_COMMANDS = new Set([
+  'git version',
+  'git rev-parse --show-toplevel',
+  'git branch --show-current',
+  'git status --short',
+  'git remote -v',
 ]);
 
 const WRITE_GIT_SUBCOMMANDS = new Set([
@@ -229,10 +224,11 @@ export function classifyCommand(argv: readonly string[]): CommandDecision {
     if (WRITE_GIT_SUBCOMMANDS.has(subcommand)) {
       return { allowed: false, reason: `git ${subcommand} is not read-only.` };
     }
-    if (READ_ONLY_GIT_SUBCOMMANDS.has(subcommand)) {
-      return { allowed: true, category: 'git:read', reason: `git ${subcommand} is allowed.` };
+    const commandKey = argv.join(' ');
+    if (READ_ONLY_GIT_COMMANDS.has(commandKey)) {
+      return { allowed: true, category: 'git:read', reason: `${commandKey} is allowed.` };
     }
-    return { allowed: false, reason: `git ${subcommand} is not in the read-only allowlist.` };
+    return { allowed: false, reason: `${commandKey} is not in the exact read-only Git command allowlist.` };
   }
 
   if (binary === 'gh') {

@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { delimiter, join } from 'node:path';
 import { runReadOnlyCommand } from '../src/shell/runReadOnlyCommand.ts';
 
 test('runReadOnlyCommand blocks disallowed command before execution', () => {
@@ -41,4 +44,22 @@ test('runReadOnlyCommand executes allowed Node command safely', () => {
   assert.equal(result.allowed, true);
   assert.equal(typeof result.ok, 'boolean');
   assert.equal(result.argv.join(' '), 'git version');
+});
+
+test('runReadOnlyCommand forces Git optional locks off', () => {
+  const binDir = mkdtempSync(join(tmpdir(), 'mck-git-env-'));
+  const gitPath = join(binDir, 'git');
+  writeFileSync(gitPath, '#!/bin/sh\nprintf "%s\\n" "$GIT_OPTIONAL_LOCKS"\n');
+  chmodSync(gitPath, 0o755);
+
+  const result = runReadOnlyCommand(['git', 'version'], {
+    env: {
+      PATH: `${binDir}${delimiter}${process.env.PATH ?? ''}`,
+      GIT_OPTIONAL_LOCKS: '1',
+    },
+  });
+
+  assert.equal(result.allowed, true);
+  assert.equal(result.ok, true);
+  assert.equal(result.stdout.trim(), '0');
 });
