@@ -141,6 +141,16 @@ test('rejects unneeded Git argument variants under otherwise read-only subcomman
   }
 });
 
+test('rejected Git argument variants do not echo argument values in the reason', () => {
+  const secretLikeRemote = 'https://synthetic-token@example.invalid/repo.git';
+  const decision = classifyCommand(['git', 'remote', 'set-url', 'origin', secretLikeRemote]);
+
+  assert.equal(decision.allowed, false);
+  assert.match(decision.reason, /git remote argument shape/);
+  assert.doesNotMatch(decision.reason, /synthetic-token/);
+  assert.doesNotMatch(decision.reason, /example\.invalid/);
+});
+
 test('assertReadOnlyCommand throws for disallowed commands', () => {
   assert.doesNotThrow(() => assertReadOnlyCommand(['gh', 'repo', 'view']));
   assert.throws(() => assertReadOnlyCommand(['gh', 'issue', 'create']));

@@ -228,7 +228,7 @@ export function classifyCommand(argv: readonly string[]): CommandDecision {
     if (READ_ONLY_GIT_COMMANDS.has(commandKey)) {
       return { allowed: true, category: 'git:read', reason: `${commandKey} is allowed.` };
     }
-    return { allowed: false, reason: `${commandKey} is not in the exact read-only Git command allowlist.` };
+    return { allowed: false, reason: `git ${subcommand} argument shape is not in the exact read-only Git command allowlist.` };
   }
 
   if (binary === 'gh') {
