@@ -14,6 +14,7 @@ function fail(argv: readonly string[], stderr: string): ReadOnlyCommandResult {
 
 function fakeIssueViewRunner(body: string): ReadOnlyCommandRunner {
   return (argv) => {
+    const key = argv.join(' ');
     if (argv[0] === 'gh' && argv[1] === 'issue' && argv[2] === 'view' && argv[3] === '123') {
       assert.ok(argv.includes('--jq'));
       return ok(argv, JSON.stringify({
