@@ -18,6 +18,33 @@ test('preflight warns on email and local path patterns', () => {
   assert.ok(result.findings.some((finding) => finding.id === 'private-path-like'));
 });
 
+test('preflight distinguishes formatted phone candidates from numeric identifiers and dates', () => {
+  const actionUrl = 'https://github.com/example/repo/actions/runs/294412081234';
+  const safeText = `Run ${actionUrl} completed on 2026-07-30.`;
+  const phoneText = 'Public-safe synthetic phone fixture: +1 (202) 555-0123.';
+  const safeResult = runPreflight(safeText, '2026-07-30T00:00:00.000Z');
+  const phoneResult = runPreflight(phoneText, '2026-07-30T00:00:00.000Z');
+
+  assert.equal(safeResult.findings.some((finding) => finding.id === 'phone-like'), false);
+  assert.equal(redactSensitiveText(safeText), safeText);
+  assert.ok(phoneResult.findings.some((finding) => finding.id === 'phone-like'));
+  assert.equal(redactSensitiveText(phoneText).includes('+1 (202) 555-0123'), false);
+});
+
+test('preflight warns and redacts compact E.164 phone candidates', () => {
+  const fixtures = [
+    'Public-safe synthetic compact international phone fixture: +442071838750.',
+    'Public-safe synthetic compact domestic phone fixture: 09012345678.',
+  ];
+
+  for (const phoneText of fixtures) {
+    const result = runPreflight(phoneText, '2026-07-30T00:00:00.000Z');
+
+    assert.ok(result.findings.some((finding) => finding.id === 'phone-like'));
+    assert.notEqual(redactSensitiveText(phoneText), phoneText);
+  }
+});
+
 test('preflight fully redacts bounded synthetic private local paths', () => {
   const fixtures = [
     {

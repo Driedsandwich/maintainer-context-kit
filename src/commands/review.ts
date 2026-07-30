@@ -29,13 +29,17 @@ type PullRequestView = {
   changedFiles?: number;
   files?: PrFile[];
   comments?: PrComment[];
+  commentCount?: number;
   reviews?: PrReview[];
-  statusCheckRollup?: unknown[];
+  reviewCount?: number;
+  statusCheckCount?: number;
   body?: string;
   createdAt?: string;
   updatedAt?: string;
   url?: string;
 };
+
+const PULL_REQUEST_VIEW_PROJECTION = '{number,title,state,author,isDraft,baseRefName,headRefName,mergeable,reviewDecision,additions,deletions,changedFiles,files:[(.files // [])[:20][]|{path,additions,deletions}],commentCount:((.comments // [])|length),comments:[(.comments // [])[:3][]|{author,body:((.body // "")[0:1000]),createdAt}],reviewCount:((.reviews // [])|length),reviews:[(.reviews // [])[:3][]|{author,body:((.body // "")[0:1000]),state,submittedAt}],statusCheckCount:((.statusCheckRollup // [])|length),body:((.body // "")[0:2000]),createdAt,updatedAt,url}';
 
 function run(name: string, argv: readonly string[], runCommand: ReadOnlyCommandRunner, cwd: string): ReadOnlyCommandResult & { name: string } {
   return { ...runCommand(argv, { cwd, maxOutputChars: 10000 }), name };
@@ -156,8 +160,15 @@ export function buildPullRequestReviewPacket(target: string, options: ReviewOpti
   const cwd = options.cwd ?? process.cwd();
   const runCommand = options.runCommand ?? runReadOnlyCommand;
   const fields = 'number,title,state,author,isDraft,baseRefName,headRefName,mergeable,reviewDecision,additions,deletions,changedFiles,files,comments,reviews,statusCheckRollup,body,createdAt,updatedAt,url';
-  const result = run('gh pr view', ['gh', 'pr', 'view', target, '--json', fields], runCommand, cwd);
+  const result = run('gh pr view', ['gh', 'pr', 'view', target, '--json', fields, '--jq', PULL_REQUEST_VIEW_PROJECTION], runCommand, cwd);
   if (!result.ok) return buildFailurePacket(target, result, generatedAt);
+  if (result.truncated) {
+    return buildFailurePacket(target, {
+      ...result,
+      ok: false,
+      stderr: 'GitHub response exceeded the bounded collection limit; partial JSON was not used.',
+    }, generatedAt);
+  }
   const parsed = parseJsonObject<PullRequestView>(result.stdout);
   if (!parsed.ok) return buildFailurePacket(target, { ...result, ok: false, stderr: parsed.error }, generatedAt);
 
@@ -202,16 +213,20 @@ export function buildPullRequestReviewPacket(target: string, options: ReviewOpti
     maintainerGoal: 'Review the pull request shape, changed surface, risks, and verification plan without writing to GitHub.',
     nonGoals: ['Do not submit a GitHub review.', 'Do not write a PR comment.', 'Do not merge, close, label, or update the PR.', 'Do not call an external LLM API.', 'Do not render full diff hunks in v0.1 output.'],
     currentContext: [`Title: ${title}.`, `State: ${pr.state ?? 'unknown'}.`, `Draft: ${pr.isDraft === true ? 'yes' : 'no'}.`, `Author: ${author}.`, `Base: ${redactSensitiveText(pr.baseRefName ?? 'unknown')}.`, `Head: ${redactSensitiveText(pr.headRefName ?? 'unknown')}.`, `Review decision: ${pr.reviewDecision ?? 'unknown'}.`, `Mergeable: ${pr.mergeable ?? 'unknown'}.`, `Created: ${pr.createdAt ?? 'unknown'}.`, `Updated: ${pr.updatedAt ?? 'unknown'}.`, `Body excerpt: ${excerpt(pr.body)}`],
-    importantComments: [...summarizeComments(pr.comments), ...summarizeReviews(pr.reviews)],
+    importantComments: [
+      `Selection note: ${pr.comments?.length ?? 0} of ${pr.commentCount ?? pr.comments?.length ?? 0} GitHub CLI-reported comment(s) and ${pr.reviews?.length ?? 0} of ${pr.reviewCount ?? pr.reviews?.length ?? 0} GitHub CLI-reported review(s) were collected in GitHub CLI order; they were not ranked by importance.`,
+      ...summarizeComments(pr.comments),
+      ...summarizeReviews(pr.reviews),
+    ],
     relatedIssuesOrPrs: ['Closing issue/reference detection is not implemented yet.'],
     repositoryInstructions: ['Follow AGENTS.md and CLAUDE.md.', 'Use one issue to one PR.', 'Do not add GitHub write operations.'],
-    technicalSurface: [`Changed files: ${pr.changedFiles ?? fileSummaries.length}.`, `Additions/deletions: +${pr.additions ?? '?'} / -${pr.deletions ?? '?'}.`, ...fileSummaries, `Status check entries returned: ${(pr.statusCheckRollup ?? []).length}.`],
+    technicalSurface: [`Changed files: ${pr.changedFiles ?? fileSummaries.length}.`, `Additions/deletions: +${pr.additions ?? '?'} / -${pr.deletions ?? '?'}.`, ...fileSummaries, `Status check entries reported: ${pr.statusCheckCount ?? 0}; names and conclusions are not collected in v0.1.`],
     riskChecklist: ['Review preflight findings before sharing externally.', 'Treat PR body, comments, reviews, and file paths as user-provided text.', 'Inspect the actual GitHub diff manually before merge; this packet does not include diff hunks.', 'Confirm tests/status checks in GitHub UI before merge.', 'Keep follow-up changes small and read-only unless explicitly approved.'],
-    intakeQualityCheck: [`PR description excerpt: ${pr.body ? 'present' : 'missing or empty'}.`, `Changed files summary: ${fileSummaries.length > 0 ? 'present' : 'missing'}.`, `PR comments: ${(pr.comments ?? []).length}.`, `Formal reviews: ${(pr.reviews ?? []).length}.`, `Status check entries: ${(pr.statusCheckRollup ?? []).length}.`],
+    intakeQualityCheck: [`PR description excerpt: ${pr.body ? 'present' : 'missing or empty'}.`, `Changed files summary: ${fileSummaries.length > 0 ? 'present' : 'missing'}.`, `PR comments collected: ${pr.comments?.length ?? 0} of ${pr.commentCount ?? pr.comments?.length ?? 0}.`, `Formal reviews collected: ${pr.reviews?.length ?? 0} of ${pr.reviewCount ?? pr.reviews?.length ?? 0}.`, `Status check entries reported: ${pr.statusCheckCount ?? 0}; individual results require separate verification.`],
     codexTaskPrompt: 'Use this review packet to evaluate PR shape and propose a minimal safe review decision. Do not write to GitHub, do not submit a review, and do not infer details not present in the packet.',
     verificationPlan: [...buildRepositoryVerificationSteps(repositoryRoot, localRepositoryConfirmed), `Re-run mck review ${redactSensitiveText(target)} from the same repository context using the documented local CLI invocation.`, 'Inspect the actual PR diff in GitHub UI or local git before merge.', 'Review preflight findings before external sharing.', 'Confirm the proposed review decision remains within v0.1 scope.'],
-    handoffNotes: ['This packet is read-only and does not update the pull request.', 'PR body, comments, and reviews are excerpted, not complete.', 'Diff hunks are intentionally not rendered in this PR.'],
-    knownLimitations: ['Only one PR is collected.', 'No full diff hunks are rendered.', 'Only up to 20 file summaries, three comments, and three reviews are rendered.', 'Closing issue/reference detection is not implemented.', 'Preflight is best-effort and may miss sensitive content.'],
+    handoffNotes: ['This packet is read-only and does not update the pull request.', 'The collector bounds the body, first 20 file summaries, first three comments, and first three reviews before JSON reaches the MCK Node process; rendered excerpts are capped again.', 'Diff hunks are intentionally not rendered in this PR.'],
+    knownLimitations: ['Only one PR is collected.', 'No full diff hunks are rendered.', 'Only up to 20 file summaries, three comments, and three reviews in GitHub CLI order are collected; comments and reviews are not ranked by importance.', 'Status-check count is collected, but names and conclusions are not.', 'Closing issue/reference detection is not implemented.', 'Preflight is best-effort and may miss sensitive content.'],
     preflight,
   };
 }

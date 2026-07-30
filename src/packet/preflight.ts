@@ -9,6 +9,7 @@ type Detector = {
   pattern: RegExp;
   advice: string;
   redaction?: string;
+  accept?: (match: string, context: { source: string; index: number }) => boolean;
 };
 
 const privateKeyPattern = new RegExp([
@@ -62,8 +63,22 @@ const DETECTORS: Detector[] = [
     id: 'phone-like',
     label: 'Phone number-like text',
     severity: 'warning',
-    pattern: /\b(?:\+?\d[\d\s().-]{8,}\d)\b/g,
+    pattern: /(?<!\d)(?:\+\d[\d\s().-]{8,}\d|\d[\d\s().-]{8,}\d)(?!\d)/g,
     advice: 'Confirm whether the phone number-like value is public-safe before sharing the packet.',
+    accept: (match, context) => {
+      const digits = match.replace(/\D/g, '');
+      if (digits.length < 10 || digits.length > 15) {
+        return false;
+      }
+
+      if (match.trim().startsWith('+') || /[\s().-]/.test(match)) {
+        return true;
+      }
+
+      const prefix = context.source.slice(Math.max(0, context.index - 256), context.index);
+      const insideHttpUrl = /(?:^|[\s([<'"`])https?:\/\/\S*$/i.test(prefix);
+      return !insideHttpUrl;
+    },
   },
   {
     id: 'private-path-like',
@@ -93,7 +108,14 @@ export function maskSensitiveValue(value: string): string {
 export function redactSensitiveText(text: string): string {
   let redacted = text;
   for (const detector of DETECTORS) {
-    redacted = redacted.replace(detector.pattern, (match) => detector.redaction ?? maskSensitiveValue(match));
+    redacted = redacted.replace(detector.pattern, (match, ...args: unknown[]) => {
+      const source = String(args.at(-1) ?? redacted);
+      const index = Number(args.at(-2) ?? 0);
+      if (detector.accept && !detector.accept(match, { source, index })) {
+        return match;
+      }
+      return detector.redaction ?? maskSensitiveValue(match);
+    });
   }
   return redacted;
 }
@@ -129,6 +151,9 @@ export function runPreflight(text: string, scannedAt: string = new Date().toISOS
     const matches = text.matchAll(detector.pattern);
     for (const match of matches) {
       const raw = match[0] ?? '';
+      if (detector.accept && !detector.accept(raw, { source: text, index: match.index ?? 0 })) {
+        continue;
+      }
       findings.push({
         id: detector.id,
         label: detector.label,

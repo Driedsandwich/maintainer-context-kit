@@ -21,10 +21,13 @@ type IssueView = {
   labels?: Array<{ name?: string }>;
   body?: string;
   comments?: Array<{ author?: { login?: string } | null; body?: string; createdAt?: string }>;
+  commentCount?: number;
   url?: string;
   createdAt?: string;
   updatedAt?: string;
 };
+
+const ISSUE_VIEW_PROJECTION = '{number,title,state,author,labels,body:((.body // "")[0:2000]),commentCount:((.comments // [])|length),comments:[(.comments // [])[:3][]|{author,body:((.body // "")[0:1000]),createdAt}],url,createdAt,updatedAt}';
 
 function commandLine(argv: readonly string[]): string {
   return argv.join(' ');
@@ -187,10 +190,17 @@ export function buildIssueTriagePacket(target: string, options: TriageOptions = 
   const cwd = options.cwd ?? process.cwd();
   const runCommand = options.runCommand ?? runReadOnlyCommand;
   const fields = 'number,title,state,author,labels,body,comments,url,createdAt,updatedAt';
-  const result = run('gh issue view', ['gh', 'issue', 'view', target, '--comments', '--json', fields], runCommand, cwd);
+  const result = run('gh issue view', ['gh', 'issue', 'view', target, '--comments', '--json', fields, '--jq', ISSUE_VIEW_PROJECTION], runCommand, cwd);
 
   if (!result.ok) {
     return buildFailurePacket(target, result, generatedAt);
+  }
+  if (result.truncated) {
+    return buildFailurePacket(target, {
+      ...result,
+      ok: false,
+      stderr: 'GitHub response exceeded the bounded collection limit; partial JSON was not used.',
+    }, generatedAt);
   }
 
   const parsed = parseJsonObject<IssueView>(result.stdout);
@@ -236,7 +246,10 @@ export function buildIssueTriagePacket(target: string, options: TriageOptions = 
     maintainerGoal: 'Decide whether the issue is actionable, what information is missing, and the next smallest safe maintainer action.',
     nonGoals: ['Do not write to GitHub.', 'Do not call an external LLM API.', 'Do not post a triage comment automatically.', 'Do not label, close, reopen, or update the issue automatically.'],
     currentContext: [`Title: ${title}.`, `State: ${issue.state ?? 'unknown'}.`, `Author: ${author}.`, `Labels: ${labelSummary(issue.labels)}.`, `Created: ${issue.createdAt ?? 'unknown'}.`, `Updated: ${issue.updatedAt ?? 'unknown'}.`, `Body excerpt: ${excerpt(issue.body)}`],
-    importantComments: commentSummaries(issue.comments),
+    importantComments: [
+      `Selection note: ${issue.comments?.length ?? 0} of ${issue.commentCount ?? issue.comments?.length ?? 0} GitHub CLI-reported comment(s) were collected in GitHub CLI order; they were not ranked by importance.`,
+      ...commentSummaries(issue.comments),
+    ],
     relatedIssuesOrPrs: ['Related issue/PR discovery is not implemented yet.'],
     repositoryInstructions: ['Follow AGENTS.md and CLAUDE.md.', 'Use one issue to one PR.', 'Do not add GitHub write operations.'],
     technicalSurface: ['GitHub issue metadata.', 'Issue body excerpt.', 'Limited issue comment excerpts.', 'Intake quality check.', 'Best-effort preflight.'],
@@ -244,8 +257,8 @@ export function buildIssueTriagePacket(target: string, options: TriageOptions = 
     intakeQualityCheck: buildIntakeQualityCheck(issue, rawText, preflight.findings.length),
     codexTaskPrompt: 'Use this triage packet to propose the smallest safe next action. Do not write to GitHub, do not call external LLM APIs, and do not infer details not present in the packet.',
     verificationPlan: [...buildRepositoryVerificationSteps(repositoryRoot, localRepositoryConfirmed), `Re-run mck triage ${redactSensitiveText(target)} from the same repository context using the documented local CLI invocation.`, 'Review preflight findings before external sharing.', 'Confirm the proposed next action remains within v0.1 scope.'],
-    handoffNotes: ['This packet is read-only and does not update the issue.', 'Only a capped body excerpt and up to three capped comment excerpts are rendered.', 'Duplicate/related search is not implemented yet.'],
-    knownLimitations: ['Only one issue is collected.', 'Body and comments are excerpted, not complete.', 'Only first three comments are rendered.', 'Related issue/PR detection is not implemented.', 'Preflight is best-effort and may miss sensitive content.'],
+    handoffNotes: ['This packet is read-only and does not update the issue.', 'The collector bounds the body and first three comments before JSON reaches the MCK Node process; rendered excerpts are capped again.', 'Duplicate/related search is not implemented yet.'],
+    knownLimitations: ['Only one issue is collected.', 'Body and comments are excerpted, not complete.', 'At most the first three comments in GitHub CLI order are collected and rendered; they are not ranked by importance.', 'Related issue/PR detection is not implemented.', 'Preflight is best-effort and may miss sensitive content.'],
     preflight,
   };
 }

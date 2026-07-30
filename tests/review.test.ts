@@ -13,6 +13,10 @@ function ok(argv: readonly string[], stdout: string): ReadOnlyCommandResult {
 function fail(argv: readonly string[], stderr: string): ReadOnlyCommandResult {
   return { argv: [...argv], allowed: true, ok: false, exitCode: 1, stdout: '', stderr, truncated: false, durationMs: 1, reason: 'test command allowed' };
 }
+
+function truncated(argv: readonly string[]): ReadOnlyCommandResult {
+  return { argv: [...argv], allowed: true, ok: true, exitCode: 0, stdout: '{"number":7', stderr: '', truncated: true, durationMs: 1, reason: 'test command allowed' };
+}
 function fakePrViewRunner(
   body: string,
   headRefName = 'feature-demo',
@@ -21,7 +25,18 @@ function fakePrViewRunner(
 ): ReadOnlyCommandRunner {
   return (argv) => {
     const key = argv.join(' ');
-    if (key === 'gh pr view 7 --json number,title,state,author,isDraft,baseRefName,headRefName,mergeable,reviewDecision,additions,deletions,changedFiles,files,comments,reviews,statusCheckRollup,body,createdAt,updatedAt,url') {
+    if (argv[0] === 'gh' && argv[1] === 'pr' && argv[2] === 'view' && argv[3] === '7') {
+      const jqIndex = argv.indexOf('--jq');
+      assert.notEqual(jqIndex, -1);
+      const projection = argv[jqIndex + 1] ?? '';
+      assert.ok(projection.includes('files:[(.files // [])[:20][]'));
+      assert.ok(projection.includes('commentCount:((.comments // [])|length)'));
+      assert.ok(projection.includes('comments:[(.comments // [])[:3][]'));
+      assert.ok(projection.includes('reviewCount:((.reviews // [])|length)'));
+      assert.ok(projection.includes('reviews:[(.reviews // [])[:3][]'));
+      assert.ok(projection.includes('statusCheckCount:((.statusCheckRollup // [])|length)'));
+      assert.ok(projection.includes('body:((.body // "")[0:1000])'));
+      assert.ok(projection.includes('body:((.body // "")[0:2000])'));
       return ok(argv, JSON.stringify({
         number: 7,
         title: 'Synthetic PR adds read-only output',
@@ -37,8 +52,10 @@ function fakePrViewRunner(
         changedFiles: 2,
         files: [{ path: 'src/cli.ts', additions: 18, deletions: 2 }, { path: 'tests/cli.test.ts', additions: 24, deletions: 4 }],
         comments: [{ author: { login: 'maintainer-demo' }, body: 'Please confirm the smoke command remains read-only.', createdAt: '2026-07-02T00:00:00Z' }],
+        commentCount: 5,
         reviews: [{ author: { login: 'reviewer-demo' }, state: 'COMMENTED', body: 'Looks small; verify docs match behavior.', submittedAt: '2026-07-02T00:00:00Z' }],
-        statusCheckRollup: [{ name: 'sanity', conclusion: 'SUCCESS' }],
+        reviewCount: 4,
+        statusCheckCount: 7,
         body,
         url: sourceUrl,
         createdAt: '2026-07-01T00:00:00Z',
@@ -87,7 +104,10 @@ test('pull request review packet collects read-only PR details', () => {
   });
   assert.equal(packet.preflight.status, 'pass');
   assert.ok(packet.currentContext.some((item) => item.includes('Synthetic PR adds read-only output')));
+  assert.ok(packet.importantComments.some((item) => item.includes('1 of 5 GitHub CLI-reported comment(s)')));
+  assert.ok(packet.importantComments.some((item) => item.includes('1 of 4 GitHub CLI-reported review(s)')));
   assert.ok(packet.technicalSurface.some((item) => item.includes('src/cli.ts')));
+  assert.ok(packet.technicalSurface.some((item) => item.includes('Status check entries reported: 7')));
   assert.ok(packet.verificationPlan.includes('Repository metadata declares common npm verification scripts. Inspect package.json and repository documentation before deciding which commands to run.'));
   assert.equal(packet.verificationPlan.some((item) => item.startsWith('Run npm ')), false);
 });
@@ -107,7 +127,8 @@ test('pull request review does not reuse verification commands from a different 
   const cwd = repositoryFixture();
   const runner: ReadOnlyCommandRunner = (argv) => {
     const key = argv.join(' ');
-    if (key === 'gh pr view https://github.com/example/other/pull/7 --json number,title,state,author,isDraft,baseRefName,headRefName,mergeable,reviewDecision,additions,deletions,changedFiles,files,comments,reviews,statusCheckRollup,body,createdAt,updatedAt,url') {
+    if (argv[0] === 'gh' && argv[1] === 'pr' && argv[2] === 'view' && argv[3] === 'https://github.com/example/other/pull/7') {
+      assert.ok(argv.includes('--jq'));
       return ok(argv, JSON.stringify({
         number: 7,
         title: 'Synthetic PR',
@@ -153,6 +174,18 @@ test('pull request collection failure returns a packet instead of throwing', () 
   assert.equal(packet.kind, 'review');
   assert.equal(packet.sourceProvenance, undefined);
   assert.match(packet.currentContext[0], /unavailable or failed/);
+});
+
+test('pull request review rejects truncated JSON before parsing partial data', () => {
+  const packet = buildPullRequestReviewPacket('7', {
+    runCommand(argv) {
+      return argv[0] === 'gh' ? truncated(argv) : fail(argv, 'not reached');
+    },
+  });
+
+  assert.equal(packet.sourceProvenance, undefined);
+  assert.ok(packet.currentContext.some((item) => item.includes('bounded collection limit')));
+  assert.ok(packet.knownLimitations.some((item) => item.includes('No PR metadata')));
 });
 
 test('pull request review fails closed when returned provenance is invalid', () => {
