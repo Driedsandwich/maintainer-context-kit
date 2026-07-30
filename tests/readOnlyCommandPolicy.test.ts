@@ -106,16 +106,39 @@ test('rejects incomplete or ambiguous gh api argv', () => {
   }
 });
 
-test('allows selected read-only git commands', () => {
-  assert.equal(classifyCommand(['git', 'status', '--short']).allowed, true);
-  assert.equal(classifyCommand(['git', 'rev-parse', '--show-toplevel']).allowed, true);
-  assert.equal(classifyCommand(['git', 'log', '--oneline']).allowed, true);
+test('allows only the exact git command shapes used by the product', () => {
+  const allowed = [
+    ['git', 'version'],
+    ['git', 'rev-parse', '--show-toplevel'],
+    ['git', 'branch', '--show-current'],
+    ['git', 'status', '--short'],
+    ['git', 'remote', '-v'],
+  ];
+
+  for (const argv of allowed) {
+    assert.equal(classifyCommand(argv).allowed, true, argv.join(' '));
+  }
 });
 
-test('rejects git write or state-changing commands', () => {
-  assert.equal(classifyCommand(['git', 'push']).allowed, false);
-  assert.equal(classifyCommand(['git', 'commit', '-m', 'x']).allowed, false);
-  assert.equal(classifyCommand(['git', 'checkout', '-b', 'x']).allowed, false);
+test('rejects write-capable and unneeded git argument shapes', () => {
+  const disallowed = [
+    ['git', 'push'],
+    ['git', 'commit', '-m', 'x'],
+    ['git', 'checkout', '-b', 'x'],
+    ['git', 'branch', '-D', 'synthetic'],
+    ['git', 'branch', 'synthetic-new'],
+    ['git', 'remote', 'set-url', 'origin', 'https://example.invalid/repo.git'],
+    ['git', 'remote', 'remove', 'origin'],
+    ['git', 'diff', '--output=synthetic.diff'],
+    ['git', 'show', '--output=synthetic.patch'],
+    ['git', 'log', '--output=synthetic.log'],
+    ['git', 'status', '--short', '--branch'],
+    ['git', 'version', '--build-options'],
+  ];
+
+  for (const argv of disallowed) {
+    assert.equal(classifyCommand(argv).allowed, false, argv.join(' '));
+  }
 });
 
 test('assertReadOnlyCommand throws for disallowed commands', () => {

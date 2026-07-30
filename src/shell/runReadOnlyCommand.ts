@@ -75,7 +75,11 @@ export function runReadOnlyCommand(
   const maxOutputChars = options.maxOutputChars ?? 4000;
   const result = spawnSync(command, args, {
     cwd: options.cwd,
-    env: { ...process.env, ...options.env },
+    env: {
+      ...process.env,
+      ...options.env,
+      ...(command === 'git' ? { GIT_OPTIONAL_LOCKS: '0' } : {}),
+    },
     encoding: 'utf8',
     shell: false,
     timeout: options.timeoutMs ?? 5000,

@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { runReadOnlyCommand } from '../src/shell/runReadOnlyCommand.ts';
 
 test('runReadOnlyCommand blocks disallowed command before execution', () => {
@@ -41,4 +44,44 @@ test('runReadOnlyCommand executes allowed Node command safely', () => {
   assert.equal(result.allowed, true);
   assert.equal(typeof result.ok, 'boolean');
   assert.equal(result.argv.join(' '), 'git version');
+});
+
+test('runReadOnlyCommand blocks write-capable git arguments before execution', () => {
+  const commands = [
+    ['git', 'branch', '-D', 'synthetic'],
+    ['git', 'remote', 'set-url', 'origin', 'https://example.invalid/repo.git'],
+    ['git', 'diff', '--output=synthetic.diff'],
+  ];
+
+  for (const argv of commands) {
+    const result = runReadOnlyCommand(argv);
+
+    assert.equal(result.allowed, false, argv.join(' '));
+    assert.equal(result.ok, false, argv.join(' '));
+    assert.equal(result.exitCode, null, argv.join(' '));
+    assert.match(result.reason, /exact read-only allowlist/, argv.join(' '));
+  }
+});
+
+test('runReadOnlyCommand disables optional git locks even if caller env requests them', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'mck-git-env-'));
+  const fakeGit = join(dir, 'git');
+
+  try {
+    writeFileSync(fakeGit, '#!/bin/sh\nprintf "%s" "$GIT_OPTIONAL_LOCKS"\n', 'utf8');
+    chmodSync(fakeGit, 0o755);
+
+    const result = runReadOnlyCommand(['git', 'version'], {
+      env: {
+        PATH: dir,
+        GIT_OPTIONAL_LOCKS: '1',
+      },
+    });
+
+    assert.equal(result.allowed, true);
+    assert.equal(result.ok, true);
+    assert.equal(result.stdout, '0');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

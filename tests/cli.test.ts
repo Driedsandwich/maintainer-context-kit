@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { emitPacket } from '../src/cli.ts';
+import { emitPacket, main } from '../src/cli.ts';
 import { buildIssueTriagePacket, buildSyntheticTriagePacket } from '../src/commands/triage.ts';
 import type { ReadOnlyCommandResult, ReadOnlyCommandRunner } from '../src/shell/runReadOnlyCommand.ts';
 
@@ -32,6 +32,19 @@ function fakeIssueViewRunner(body: string): ReadOnlyCommandRunner {
     return fail(argv, 'not found');
   };
 }
+
+test('version command returns the source version without running doctor output', async () => {
+  let stdout = '';
+  let stderr = '';
+  const output = { write: (chunk: string) => { stdout += chunk; } } as NodeJS.WriteStream;
+  const error = { write: (chunk: string) => { stderr += chunk; } } as NodeJS.WriteStream;
+
+  const exitCode = await main(['--version'], output, error);
+
+  assert.equal(exitCode, 0);
+  assert.equal(stdout, '0.0.0\n');
+  assert.equal(stderr, '');
+});
 
 test('cli emitter withholds blocked packet output', () => {
   const tokenLike = ['gh', 'p_', 'FAKEVALUEFAKEVALUEFAKEVALUE'].join('');
