@@ -7,6 +7,7 @@ import { buildIssueTriagePacket, buildSyntheticTriagePacket } from './commands/t
 import { buildPullRequestReviewPacket, buildSyntheticReviewPacket } from './commands/review.ts';
 import { renderMaintainerTaskPacket } from './packet/renderMaintainerTaskPacket.ts';
 import type { MaintainerTaskPacket } from './packet/types.ts';
+import { VERSION } from './version.ts';
 
 function printHelp(write: (text: string) => void): void {
   write([
@@ -48,7 +49,7 @@ export async function main(argv: string[] = process.argv.slice(2), stdout: NodeJ
     return 0;
   }
   if (command === '--version' || command === '-v') {
-    writeOut(buildDoctorReport().version);
+    writeOut(VERSION);
     return 0;
   }
   if (command === 'doctor') {
