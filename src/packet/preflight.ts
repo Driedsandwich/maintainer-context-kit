@@ -23,6 +23,16 @@ const githubFineGrainedTokenPattern = /\bgithub_pat_[A-Za-z0-9_]{20,}\b/g;
 const credentialAssignmentPattern = /\b(?:api[_-]?key|token|secret|password)\b\s*[:=]\s*['"]?[^\s,;'"`<>{}\[\]()]{12,}['"]?/gi;
 const privatePathPattern = /(?<![A-Za-z0-9:/\\])(?:\/(?:Users|home)\/[A-Za-z0-9._-]+(?:\/[^\s/\\,;:'"`<>{}\[\]()!?]+)*(?<!\.)|[A-Za-z]:\\Users\\[A-Za-z0-9._-]+(?:\\[^\s/\\,;:'"`<>{}\[\]()!?]+)*(?<!\.))(?=$|[\s,;:'"`<>{}\[\]()!?.])/gi;
 
+function isCanonicalGitHubActionsRunId(match: string, context: { source: string; index: number }): boolean {
+  const prefix = context.source.slice(Math.max(0, context.index - 256), context.index);
+  if (!/(?:^|[\s([<'"`])https:\/\/github\.com\/[^/\s?#]+\/[^/\s?#]+\/actions\/runs\/$/i.test(prefix)) {
+    return false;
+  }
+
+  const followingCharacter = context.source.at(context.index + match.length);
+  return followingCharacter === undefined || /[/?#\s)\]>'"`,.!:;]/.test(followingCharacter);
+}
+
 const DETECTORS: Detector[] = [
   {
     id: 'private-key-block',
@@ -75,9 +85,7 @@ const DETECTORS: Detector[] = [
         return true;
       }
 
-      const prefix = context.source.slice(Math.max(0, context.index - 256), context.index);
-      const insideHttpUrl = /(?:^|[\s([<'"`])https?:\/\/\S*$/i.test(prefix);
-      return !insideHttpUrl;
+      return !isCanonicalGitHubActionsRunId(match, context);
     },
   },
   {

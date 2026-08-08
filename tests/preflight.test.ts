@@ -45,6 +45,43 @@ test('preflight warns and redacts compact E.164 phone candidates', () => {
   }
 });
 
+test('preflight only exempts compact numeric values in canonical GitHub Actions run URLs', () => {
+  const fixtures = [
+    {
+      label: 'plain text',
+      source: 'Public-safe synthetic compact phone fixture: 09012345678.',
+      shouldWarn: true,
+    },
+    {
+      label: 'GitHub Actions run URL',
+      source: 'Run https://github.com/example/repo/actions/runs/294412081234 completed.',
+      shouldWarn: false,
+    },
+    {
+      label: 'phone-bearing URL path',
+      source: 'Review https://example.test/contact/09012345678 before sharing.',
+      shouldWarn: true,
+    },
+    {
+      label: 'phone-bearing URL query',
+      source: 'Review https://example.test/contact?phone=09012345678 before sharing.',
+      shouldWarn: true,
+    },
+  ];
+
+  for (const fixture of fixtures) {
+    const result = runPreflight(fixture.source, '2026-08-08T00:00:00.000Z');
+    const redacted = redactSensitiveText(fixture.source);
+
+    assert.equal(
+      result.findings.some((finding) => finding.id === 'phone-like'),
+      fixture.shouldWarn,
+      fixture.label,
+    );
+    assert.equal(redacted !== fixture.source, fixture.shouldWarn, fixture.label);
+  }
+});
+
 test('preflight fully redacts bounded synthetic private local paths', () => {
   const fixtures = [
     {
