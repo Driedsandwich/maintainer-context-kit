@@ -10,6 +10,12 @@ type Detector = {
   advice: string;
   redaction?: string;
   accept?: (match: string, context: { source: string; index: number }) => boolean;
+  findMatches?: (source: string) => DetectorMatch[];
+};
+
+type DetectorMatch = {
+  raw: string;
+  index: number;
 };
 
 const privateKeyPattern = new RegExp([
@@ -22,6 +28,59 @@ const githubTokenPattern = new RegExp(`\\b${['gh', '[pousr]_'].join('')}[A-Za-z0
 const githubFineGrainedTokenPattern = /\bgithub_pat_[A-Za-z0-9_]{20,}\b/g;
 const credentialAssignmentPattern = /\b(?:api[_-]?key|token|secret|password)\b\s*[:=]\s*['"]?[^\s,;'"`<>{}\[\]()]{12,}['"]?/gi;
 const privatePathPattern = /(?<![A-Za-z0-9:/\\])(?:\/(?:Users|home)\/[A-Za-z0-9._-]+(?:\/[^\s/\\,;:'"`<>{}\[\]()!?]+)*(?<!\.)|[A-Za-z]:\\Users\\[A-Za-z0-9._-]+(?:\\[^\s/\\,;:'"`<>{}\[\]()!?]+)*(?<!\.))(?=$|[\s,;:'"`<>{}\[\]()!?.])/gi;
+const phoneLikePattern = /(?<!\d)(?:\+\d[\d\s().-]{8,}\d|\d[\d\s().-]{8,}\d)(?!\d)/g;
+
+function splitPhoneLikeSpan(raw: string, sourceIndex: number): DetectorMatch[] {
+  const groups = [...raw.matchAll(/\+?\d+/g)].map((group) => ({
+    index: group.index ?? 0,
+    end: (group.index ?? 0) + group[0].length,
+    digitCount: group[0].replace(/\D/g, '').length,
+  }));
+  const totalDigits = groups.reduce((sum, group) => sum + group.digitCount, 0);
+
+  if (totalDigits <= 15) {
+    return [{ raw, index: sourceIndex }];
+  }
+
+  const nextGroup = new Array<number | undefined>(groups.length + 1);
+  nextGroup[groups.length] = groups.length;
+  for (let start = groups.length - 1; start >= 0; start -= 1) {
+    let digits = 0;
+    for (let end = start; end < groups.length; end += 1) {
+      digits += groups[end].digitCount;
+      if (digits > 15) {
+        break;
+      }
+      if (digits >= 10 && nextGroup[end + 1] !== undefined) {
+        nextGroup[start] = end + 1;
+        break;
+      }
+    }
+  }
+
+  if (nextGroup[0] === undefined) {
+    return [];
+  }
+
+  const matches: DetectorMatch[] = [];
+  for (let start = 0; start < groups.length;) {
+    const end = nextGroup[start] as number;
+    const rawStart = groups[start].index;
+    const rawEnd = groups[end - 1].end;
+    matches.push({
+      raw: raw.slice(rawStart, rawEnd),
+      index: sourceIndex + rawStart,
+    });
+    start = end;
+  }
+  return matches;
+}
+
+function findPhoneLikeMatches(source: string): DetectorMatch[] {
+  return [...source.matchAll(phoneLikePattern)].flatMap((match) => (
+    splitPhoneLikeSpan(match[0] ?? '', match.index ?? 0)
+  ));
+}
 
 function isCanonicalGitHubActionsRunId(match: string, context: { source: string; index: number }): boolean {
   const prefix = context.source.slice(Math.max(0, context.index - 256), context.index);
@@ -73,7 +132,8 @@ const DETECTORS: Detector[] = [
     id: 'phone-like',
     label: 'Phone number-like text',
     severity: 'warning',
-    pattern: /(?<!\d)(?:\+\d[\d\s().-]{8,}\d|\d[\d\s().-]{8,}\d)(?!\d)/g,
+    pattern: phoneLikePattern,
+    findMatches: findPhoneLikeMatches,
     advice: 'Confirm whether the phone number-like value is public-safe before sharing the packet.',
     accept: (match, context) => {
       const digits = match.replace(/\D/g, '');
@@ -105,6 +165,16 @@ const DETECTORS: Detector[] = [
   },
 ];
 
+function findDetectorMatches(detector: Detector, source: string): DetectorMatch[] {
+  if (detector.findMatches) {
+    return detector.findMatches(source);
+  }
+  return [...source.matchAll(detector.pattern)].map((match) => ({
+    raw: match[0] ?? '',
+    index: match.index ?? 0,
+  }));
+}
+
 export function maskSensitiveValue(value: string): string {
   const normalized = value.replace(/\s+/g, ' ').trim();
   if (normalized.length <= 8) {
@@ -116,6 +186,18 @@ export function maskSensitiveValue(value: string): string {
 export function redactSensitiveText(text: string): string {
   let redacted = text;
   for (const detector of DETECTORS) {
+    if (detector.findMatches) {
+      const matches = findDetectorMatches(detector, redacted);
+      for (const match of matches.toReversed()) {
+        if (detector.accept && !detector.accept(match.raw, { source: redacted, index: match.index })) {
+          continue;
+        }
+        const replacement = detector.redaction ?? maskSensitiveValue(match.raw);
+        redacted = `${redacted.slice(0, match.index)}${replacement}${redacted.slice(match.index + match.raw.length)}`;
+      }
+      continue;
+    }
+
     redacted = redacted.replace(detector.pattern, (match, ...args: unknown[]) => {
       const source = String(args.at(-1) ?? redacted);
       const index = Number(args.at(-2) ?? 0);
@@ -156,17 +238,15 @@ export function runPreflight(text: string, scannedAt: string = new Date().toISOS
   const findings: PreflightFinding[] = [];
 
   for (const detector of DETECTORS) {
-    const matches = text.matchAll(detector.pattern);
-    for (const match of matches) {
-      const raw = match[0] ?? '';
-      if (detector.accept && !detector.accept(raw, { source: text, index: match.index ?? 0 })) {
+    for (const match of findDetectorMatches(detector, text)) {
+      if (detector.accept && !detector.accept(match.raw, { source: text, index: match.index })) {
         continue;
       }
       findings.push({
         id: detector.id,
         label: detector.label,
         severity: detector.severity,
-        excerpt: detector.redaction ?? maskSensitiveValue(raw),
+        excerpt: detector.redaction ?? maskSensitiveValue(match.raw),
         advice: detector.advice,
       });
     }

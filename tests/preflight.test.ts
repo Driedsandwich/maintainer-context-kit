@@ -45,12 +45,62 @@ test('preflight warns and redacts compact E.164 phone candidates', () => {
   }
 });
 
+test('preflight separately warns and redacts adjacent phone-like candidates', () => {
+  const fixtures = [
+    {
+      label: 'space-separated compact candidates',
+      values: ['09012345678', '08087654321'],
+      source: 'Synthetic contacts: 09012345678 08087654321.',
+    },
+    {
+      label: 'hyphen-separated compact candidates',
+      values: ['09012345678', '08087654321'],
+      source: 'Synthetic contacts: 09012345678-08087654321.',
+    },
+    {
+      label: 'multiple formatted candidates',
+      values: ['090-1234-5678', '080-8765-4321', '070-1111-2222'],
+      source: 'Synthetic contacts: 090-1234-5678 080-8765-4321 070-1111-2222.',
+    },
+  ];
+
+  for (const fixture of fixtures) {
+    const result = runPreflight(fixture.source, '2026-08-09T00:00:00.000Z');
+    const redacted = redactSensitiveText(fixture.source);
+    const phoneFindings = result.findings.filter((finding) => finding.id === 'phone-like');
+
+    assert.equal(result.status, 'warning', fixture.label);
+    assert.equal(phoneFindings.length, fixture.values.length, fixture.label);
+    for (const value of fixture.values) {
+      assert.equal(JSON.stringify(result).includes(value), false, fixture.label);
+      assert.equal(redacted.includes(value), false, fixture.label);
+    }
+  }
+});
+
+test('preflight preserves an adjacent canonical Actions run id while redacting the phone candidate', () => {
+  const actionUrl = 'https://github.com/example/repo/actions/runs/294412081234';
+  const phone = '09012345678';
+  const source = `${actionUrl} ${phone}`;
+  const result = runPreflight(source, '2026-08-09T00:00:00.000Z');
+  const redacted = redactSensitiveText(source);
+
+  assert.equal(result.findings.filter((finding) => finding.id === 'phone-like').length, 1);
+  assert.equal(redacted.includes(actionUrl), true);
+  assert.equal(redacted.includes(phone), false);
+});
+
 test('preflight only exempts compact numeric values in canonical GitHub Actions run URLs', () => {
   const fixtures = [
     {
       label: 'plain text',
       source: 'Public-safe synthetic compact phone fixture: 09012345678.',
       shouldWarn: true,
+    },
+    {
+      label: 'ordinary numeric prose',
+      source: 'Build 2026-08-09 processed 42 public-safe fixtures.',
+      shouldWarn: false,
     },
     {
       label: 'GitHub Actions run URL',
