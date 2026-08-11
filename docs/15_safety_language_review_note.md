@@ -2,6 +2,10 @@
 
 Date: 2026-07-03
 
+> Historical evidence. This note records an earlier private-iteration review.
+> It is not the current repository status or visibility policy. See
+> [Current status](03_status.md).
+
 ## Status
 
 Safety and limitation language has been reviewed for the current private-iteration state. No code or behavior change is made by this note.

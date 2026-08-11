@@ -242,8 +242,8 @@ function prSummaries(stdout: string): { summaries: string[]; raw: string } {
 export function buildSyntheticHandoffPacket(generatedAt: string = new Date().toISOString()): MaintainerTaskPacket {
   const sourceText = [
     'Synthetic maintainer handoff demo.',
-    'Repository status: planning complete, CLI scaffold complete, doctor diagnostics complete, packet renderer complete.',
-    'Next action: implement real read-only repository collection after demo command is validated.',
+    'Repository status: packet renderer, doctor diagnostics, repository handoff, and bounded Issue/PR collectors are implemented.',
+    'Demo purpose: validate packet structure and safety wording without collecting real repository or GitHub content.',
   ].join('\n');
 
   const preflight = runPreflight(sourceText, generatedAt);
@@ -253,7 +253,7 @@ export function buildSyntheticHandoffPacket(generatedAt: string = new Date().toI
     source: 'synthetic/demo-repository',
     generatedAt,
     toolVersion: VERSION,
-    maintainerGoal: 'Resume the project with enough context to choose the next small implementation step.',
+    maintainerGoal: 'Validate the repository-handoff packet shape and safety boundaries with synthetic input.',
     nonGoals: [
       'Do not write to GitHub.',
       'Do not call an external LLM API.',
@@ -261,13 +261,13 @@ export function buildSyntheticHandoffPacket(generatedAt: string = new Date().toI
     ],
     currentContext: [
       'The project is a local-first, read-only CLI for Maintainer Task Packets.',
-      'The CLI scaffold and doctor diagnostics exist.',
-      'The internal packet renderer and best-effort preflight exist.',
+      'The packet renderer, doctor diagnostics, repository handoff, and bounded Issue/PR collectors exist.',
+      'The best-effort preflight and fail-closed read-only command policy exist.',
       'This demo uses synthetic public-safe content only.',
     ],
     importantComments: [
-      'Real GitHub issue, PR, release, and repository collection is intentionally not implemented in this demo.',
-      'The next implementation should keep one issue to one PR and maintain the read-only boundary.',
+      'This demo intentionally does not execute the real repository, Issue, or PR collectors.',
+      'Use non-demo commands for real read-only collection and keep one issue to one PR.',
     ],
     relatedIssuesOrPrs: [
       'Synthetic reference: PR0 established the project ledger.',
@@ -277,7 +277,8 @@ export function buildSyntheticHandoffPacket(generatedAt: string = new Date().toI
     ],
     repositoryInstructions: [
       'Follow AGENTS.md and CLAUDE.md.',
-      'Use synthetic fixtures only until real read-only collection is implemented safely.',
+      'Use synthetic fixtures only for demo and regression validation.',
+      'Use the non-demo handoff, triage, or review command for real read-only collection.',
       'Keep examples public-safe.',
     ],
     technicalSurface: [
@@ -294,9 +295,9 @@ export function buildSyntheticHandoffPacket(generatedAt: string = new Date().toI
     ],
     intakeQualityCheck: [
       'Not applicable to repository-level handoff demo.',
-      'Future issue-level packets should check reproduction steps, expected behavior, actual behavior, environment, specificity, and security claims.',
+      'Issue and pull-request intake quality is evaluated by the non-demo triage and review commands, not this repository-level fixture.',
     ],
-    codexTaskPrompt: 'Implement the next small read-only feature using one issue and one PR. Preserve local-first behavior, do not write to GitHub, and do not call external LLM APIs.',
+    codexTaskPrompt: 'Use this synthetic packet only to verify packet shape and safety wording. Do not treat it as real repository input or an implementation request.',
     verificationPlan: [
       UNCONFIRMED_REPOSITORY_VERIFICATION,
       'Re-run mck handoff --demo using the documented local CLI invocation.',
@@ -305,7 +306,7 @@ export function buildSyntheticHandoffPacket(generatedAt: string = new Date().toI
     ],
     handoffNotes: [
       'This is a synthetic demo packet for validating rendering and CLI flow.',
-      'The next real feature should collect repository context through read-only adapters.',
+      'Real repository collection is available through mck handoff without --demo; this fixture does not exercise it.',
     ],
     knownLimitations: [
       'Synthetic demo only.',

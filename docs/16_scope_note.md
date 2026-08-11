@@ -2,6 +2,8 @@
 
 Date: 2026-07-03
 
+> Historical evidence. This note records the private-iteration decision at the date above. It is not the current repository status or visibility policy. See [Current status](03_status.md).
+
 ## Status
 
 This note confirms the current private-iteration scope after the review evidence recorded so far.

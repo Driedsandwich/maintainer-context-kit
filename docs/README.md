@@ -2,6 +2,7 @@
 
 ## Start here
 
+- [Current status](03_status.md)
 - [Project goal](00_goal.md)
 - [v0.1 requirements](01_requirements.md)
 - [Local runbook](02_runbook.md)
@@ -20,4 +21,4 @@
 - [Template-only comparison](27_template_only_comparison_20260715.md)
 - [Repository-aware verification validation](28_repository_aware_verification_validation_20260715.md)
 
-Historical validation notes may describe earlier private-iteration decisions. The public preview posture in the root [README](../README.md), current source, tests, and safety policy is authoritative for this candidate.
+Historical validation notes may describe earlier private-iteration decisions. The current [status](03_status.md), root [README](../README.md), source, tests, and safety policy are authoritative for the public preview.

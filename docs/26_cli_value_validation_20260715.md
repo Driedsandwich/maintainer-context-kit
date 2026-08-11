@@ -1,5 +1,7 @@
 # CLI実務価値検証記録 — 2026-07-15
 
+> **履歴資料:** 以下のPRIVATE CONTINUE／DISTRIBUTION HOLD判定は当時の検証判断です。現在の公開状態と保守方針は[Current status](03_status.md)を正本とします。測定結果と限界は履歴証拠として保持します。
+
 Date: 2026-07-15 JST
 Repository ref at start: `7acfa27d7536638011fca6350f405cdd4fe10244`
 Runtime: Node `v24.14.0`

@@ -57,12 +57,13 @@ Live triage and review packets validate the URL returned by GitHub CLI and rende
 
 ## Safety model
 
-`mck` centralizes subprocess execution behind a read-only allowlist, caps selected GitHub excerpts, marks collected content as untrusted, applies best-effort preflight and redaction, and withholds packet stdout when a blocking finding is detected.
+`mck` centralizes subprocess execution behind a fail-closed policy. Local Git collection is restricted to the exact argument shapes used by the product, and GitHub REST access is restricted to validated GET requests. The runner disables optional Git locks, bounds GitHub fields before JSON reaches the MCK Node process, caps rendered excerpts, marks collected content as untrusted, applies best-effort preflight and redaction, and withholds packet stdout when a blocking finding is detected.
 
 These controls reduce some obvious risks; they do not prove that a packet is safe to publish. Review every generated packet and use a dedicated secret scanner where appropriate.
 
 ## Project materials
 
+- [Current status](docs/03_status.md)
 - [Documentation index](docs/README.md)
 - [Project goal](docs/00_goal.md)
 - [v0.1 requirements](docs/01_requirements.md)
@@ -72,6 +73,12 @@ These controls reduce some obvious risks; they do not prove that a packet is saf
 - [Packet specification](packet-spec/maintainer-task-packet-v0.1.md)
 - [Reusable packet template](templates/maintainer-task-packet.md)
 - [Security policy](SECURITY.md)
+
+## Browser-side companion
+
+[GitHub Web Context Exporter](https://github.com/Driedsandwich/github-web-context-exporter) captures a bounded Markdown preview from the currently visible GitHub Issue or Pull Request conversation page. Maintainer Context Kit remains responsible for repository-aware handoff, triage, and review packets.
+
+The two projects operate independently. There is no file import, stdin bridge, shared runtime schema, or automatic transfer between them.
 
 ## Issues and contributions
 

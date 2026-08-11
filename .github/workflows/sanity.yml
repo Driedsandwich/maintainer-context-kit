@@ -14,21 +14,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node.js
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.12.0
 
       - name: Verify candidate structure
         run: |
+          test -f .github/dependabot.yml
           test -f LICENSE
           test -f README.md
           test -f SECURITY.md
           test -f CONTRIBUTING.md
+          test -f docs/03_status.md
           test -f packet-spec/maintainer-task-packet-v0.1.md
           test -f templates/maintainer-task-packet.md
+
+      - name: Reject tracked environment files
+        run: |
+          tracked="$(git ls-files | grep -E '(^|/)\.env(\..+)?$' || true)"
+          if [ -n "$tracked" ]; then
+            echo "Tracked environment file(s) detected:"
+            echo "$tracked"
+            exit 1
+          fi
 
       - name: Run tests
         run: npm test

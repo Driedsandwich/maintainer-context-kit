@@ -147,9 +147,9 @@ export function buildSyntheticReviewPacket(generatedAt: string = new Date().toIS
     technicalSurface: ['CLI command routing.', 'Packet rendering.', 'Unit tests.', 'README and runbook documentation.'],
     riskChecklist: ['Changed surface is small and understandable.', 'Tests cover the new behavior.', 'Documentation matches the implemented behavior.', 'No GitHub write command is introduced.', 'No external LLM API call is introduced.', 'No package publication path is introduced.', 'Preflight limitation wording remains present.'],
     intakeQualityCheck: ['PR description: present in synthetic form.', 'Changed files summary: present in synthetic form.', 'Verification evidence: present in synthetic form.', 'Security-sensitive changes: none claimed in synthetic form.', 'Docs impact: present.'],
-    codexTaskPrompt: 'Use this review packet to evaluate the PR shape and propose a minimal safe review decision. Do not write to GitHub, do not submit a review, and do not call external LLM APIs.',
+    codexTaskPrompt: 'Use this synthetic packet only to verify review structure and safety wording. Do not make a real merge or review decision from its synthetic claims.',
     verificationPlan: [UNCONFIRMED_REPOSITORY_VERIFICATION, 'Re-run mck review --demo using the documented local CLI invocation.', 'Confirm output includes changed surface, risk checklist, and verification plan.', 'Confirm preflight result and limitation wording are present.'],
-    handoffNotes: ['This is a synthetic demo packet for validating pull-request-focused review structure.', 'Real PR collection should be added later with capped diff summaries and redacted comment excerpts.'],
+    handoffNotes: ['This is a synthetic demo packet for validating pull-request-focused review structure.', 'Real read-only PR collection is available through mck review <pr-number-or-url>; this fixture does not exercise it.'],
     knownLimitations: ['Synthetic demo only.', 'Does not inspect actual pull request diffs or comments.', 'Does not submit GitHub reviews or comments.', 'Does not prove the packet is safe to share publicly.'],
     preflight,
   };
