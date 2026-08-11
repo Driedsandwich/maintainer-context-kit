@@ -15,6 +15,10 @@ function fail(argv: readonly string[], stderr: string): ReadOnlyCommandResult {
   return { argv: [...argv], allowed: true, ok: false, exitCode: 1, stdout: '', stderr, truncated: false, durationMs: 1, reason: 'test command allowed' };
 }
 
+function truncated(argv: readonly string[]): ReadOnlyCommandResult {
+  return { argv: [...argv], allowed: true, ok: true, exitCode: 0, stdout: '{"number":123', stderr: '', truncated: true, durationMs: 1, reason: 'test command allowed' };
+}
+
 function fakeIssueViewRunner(
   body: string,
   label = 'bug',
@@ -23,7 +27,14 @@ function fakeIssueViewRunner(
 ): ReadOnlyCommandRunner {
   return (argv) => {
     const key = argv.join(' ');
-    if (key === 'gh issue view 123 --comments --json number,title,state,author,labels,body,comments,url,createdAt,updatedAt') {
+    if (argv[0] === 'gh' && argv[1] === 'issue' && argv[2] === 'view' && argv[3] === '123') {
+      const jqIndex = argv.indexOf('--jq');
+      assert.notEqual(jqIndex, -1);
+      const projection = argv[jqIndex + 1] ?? '';
+      assert.ok(projection.includes('body:((.body // "")[0:2000])'));
+      assert.ok(projection.includes('commentCount:((.comments // [])|length)'));
+      assert.ok(projection.includes('comments:[(.comments // [])[:3][]'));
+      assert.ok(projection.includes('body:((.body // "")[0:1000])'));
       return ok(argv, JSON.stringify({
         number: 123,
         title: 'Synthetic issue cannot run command',
@@ -32,6 +43,7 @@ function fakeIssueViewRunner(
         labels: [{ name: label }],
         body,
         comments: [{ author: { login: 'maintainer-demo' }, body: 'Can you share exact reproduction steps?', createdAt: '2026-07-02T00:00:00Z' }],
+        commentCount: 5,
         createdAt: '2026-07-01T00:00:00Z',
         updatedAt: '2026-07-02T00:00:00Z',
         url: sourceUrl,
@@ -87,6 +99,7 @@ test('issue triage packet collects read-only issue details', () => {
   });
   assert.equal(packet.preflight.status, 'pass');
   assert.ok(packet.currentContext.some((item) => item.includes('Synthetic issue cannot run command')));
+  assert.ok(packet.importantComments.some((item) => item.includes('1 of 5 GitHub CLI-reported comment(s)')));
   assert.ok(packet.importantComments.some((item) => item.includes('exact reproduction steps')));
   assert.ok(packet.intakeQualityCheck.some((item) => item.includes('Expected behavior: present')));
   assert.ok(packet.verificationPlan.includes('Repository metadata declares common npm verification scripts. Inspect package.json and repository documentation before deciding which commands to run.'));
@@ -108,7 +121,8 @@ test('issue triage does not reuse verification commands from a different local r
   const cwd = repositoryFixture();
   const runner: ReadOnlyCommandRunner = (argv) => {
     const key = argv.join(' ');
-    if (key === 'gh issue view https://github.com/example/other/issues/123 --comments --json number,title,state,author,labels,body,comments,url,createdAt,updatedAt') {
+    if (argv[0] === 'gh' && argv[1] === 'issue' && argv[2] === 'view' && argv[3] === 'https://github.com/example/other/issues/123') {
+      assert.ok(argv.includes('--jq'));
       return ok(argv, JSON.stringify({
         number: 123,
         title: 'Synthetic issue',
@@ -167,6 +181,18 @@ test('issue triage collection failure returns a packet instead of throwing', () 
   assert.equal(packet.sourceProvenance, undefined);
   assert.match(packet.currentContext[0], /unavailable or failed/);
   assert.match(packet.codexTaskPrompt, /Do not implement from this packet/);
+});
+
+test('issue triage rejects truncated JSON before parsing partial data', () => {
+  const packet = buildIssueTriagePacket('123', {
+    runCommand(argv) {
+      return argv[0] === 'gh' ? truncated(argv) : fail(argv, 'not reached');
+    },
+  });
+
+  assert.equal(packet.sourceProvenance, undefined);
+  assert.ok(packet.currentContext.some((item) => item.includes('bounded collection limit')));
+  assert.ok(packet.knownLimitations.some((item) => item.includes('No issue metadata')));
 });
 
 test('issue triage fails closed when returned provenance is invalid', () => {

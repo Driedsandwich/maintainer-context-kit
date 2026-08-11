@@ -15,7 +15,8 @@ function fail(argv: readonly string[], stderr: string): ReadOnlyCommandResult {
 function fakeIssueViewRunner(body: string): ReadOnlyCommandRunner {
   return (argv) => {
     const key = argv.join(' ');
-    if (key === 'gh issue view 123 --comments --json number,title,state,author,labels,body,comments,url,createdAt,updatedAt') {
+    if (argv[0] === 'gh' && argv[1] === 'issue' && argv[2] === 'view' && argv[3] === '123') {
+      assert.ok(argv.includes('--jq'));
       return ok(argv, JSON.stringify({
         number: 123,
         title: 'Synthetic issue cannot run command',
@@ -24,6 +25,7 @@ function fakeIssueViewRunner(body: string): ReadOnlyCommandRunner {
         labels: [{ name: 'bug' }],
         body,
         comments: [{ author: { login: 'maintainer-demo' }, body: 'Can you share exact reproduction steps?', createdAt: '2026-07-02T00:00:00Z' }],
+        commentCount: 1,
         createdAt: '2026-07-01T00:00:00Z',
         updatedAt: '2026-07-02T00:00:00Z',
         url: 'https://github.com/example/repo/issues/123',

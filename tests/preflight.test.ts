@@ -18,6 +18,120 @@ test('preflight warns on email and local path patterns', () => {
   assert.ok(result.findings.some((finding) => finding.id === 'private-path-like'));
 });
 
+test('preflight distinguishes formatted phone candidates from numeric identifiers and dates', () => {
+  const actionUrl = 'https://github.com/example/repo/actions/runs/294412081234';
+  const safeText = `Run ${actionUrl} completed on 2026-07-30.`;
+  const phoneText = 'Public-safe synthetic phone fixture: +1 (202) 555-0123.';
+  const safeResult = runPreflight(safeText, '2026-07-30T00:00:00.000Z');
+  const phoneResult = runPreflight(phoneText, '2026-07-30T00:00:00.000Z');
+
+  assert.equal(safeResult.findings.some((finding) => finding.id === 'phone-like'), false);
+  assert.equal(redactSensitiveText(safeText), safeText);
+  assert.ok(phoneResult.findings.some((finding) => finding.id === 'phone-like'));
+  assert.equal(redactSensitiveText(phoneText).includes('+1 (202) 555-0123'), false);
+});
+
+test('preflight warns and redacts compact E.164 phone candidates', () => {
+  const fixtures = [
+    'Public-safe synthetic compact international phone fixture: +442071838750.',
+    'Public-safe synthetic compact domestic phone fixture: 09012345678.',
+  ];
+
+  for (const phoneText of fixtures) {
+    const result = runPreflight(phoneText, '2026-07-30T00:00:00.000Z');
+
+    assert.ok(result.findings.some((finding) => finding.id === 'phone-like'));
+    assert.notEqual(redactSensitiveText(phoneText), phoneText);
+  }
+});
+
+test('preflight separately warns and redacts adjacent phone-like candidates', () => {
+  const fixtures = [
+    {
+      label: 'space-separated compact candidates',
+      values: ['09012345678', '08087654321'],
+      source: 'Synthetic contacts: 09012345678 08087654321.',
+    },
+    {
+      label: 'hyphen-separated compact candidates',
+      values: ['09012345678', '08087654321'],
+      source: 'Synthetic contacts: 09012345678-08087654321.',
+    },
+    {
+      label: 'multiple formatted candidates',
+      values: ['090-1234-5678', '080-8765-4321', '070-1111-2222'],
+      source: 'Synthetic contacts: 090-1234-5678 080-8765-4321 070-1111-2222.',
+    },
+  ];
+
+  for (const fixture of fixtures) {
+    const result = runPreflight(fixture.source, '2026-08-09T00:00:00.000Z');
+    const redacted = redactSensitiveText(fixture.source);
+    const phoneFindings = result.findings.filter((finding) => finding.id === 'phone-like');
+
+    assert.equal(result.status, 'warning', fixture.label);
+    assert.equal(phoneFindings.length, fixture.values.length, fixture.label);
+    for (const value of fixture.values) {
+      assert.equal(JSON.stringify(result).includes(value), false, fixture.label);
+      assert.equal(redacted.includes(value), false, fixture.label);
+    }
+  }
+});
+
+test('preflight preserves an adjacent canonical Actions run id while redacting the phone candidate', () => {
+  const actionUrl = 'https://github.com/example/repo/actions/runs/294412081234';
+  const phone = '09012345678';
+  const source = `${actionUrl} ${phone}`;
+  const result = runPreflight(source, '2026-08-09T00:00:00.000Z');
+  const redacted = redactSensitiveText(source);
+
+  assert.equal(result.findings.filter((finding) => finding.id === 'phone-like').length, 1);
+  assert.equal(redacted.includes(actionUrl), true);
+  assert.equal(redacted.includes(phone), false);
+});
+
+test('preflight only exempts compact numeric values in canonical GitHub Actions run URLs', () => {
+  const fixtures = [
+    {
+      label: 'plain text',
+      source: 'Public-safe synthetic compact phone fixture: 09012345678.',
+      shouldWarn: true,
+    },
+    {
+      label: 'ordinary numeric prose',
+      source: 'Build 2026-08-09 processed 42 public-safe fixtures.',
+      shouldWarn: false,
+    },
+    {
+      label: 'GitHub Actions run URL',
+      source: 'Run https://github.com/example/repo/actions/runs/294412081234 completed.',
+      shouldWarn: false,
+    },
+    {
+      label: 'phone-bearing URL path',
+      source: 'Review https://example.test/contact/09012345678 before sharing.',
+      shouldWarn: true,
+    },
+    {
+      label: 'phone-bearing URL query',
+      source: 'Review https://example.test/contact?phone=09012345678 before sharing.',
+      shouldWarn: true,
+    },
+  ];
+
+  for (const fixture of fixtures) {
+    const result = runPreflight(fixture.source, '2026-08-08T00:00:00.000Z');
+    const redacted = redactSensitiveText(fixture.source);
+
+    assert.equal(
+      result.findings.some((finding) => finding.id === 'phone-like'),
+      fixture.shouldWarn,
+      fixture.label,
+    );
+    assert.equal(redacted !== fixture.source, fixture.shouldWarn, fixture.label);
+  }
+});
+
 test('preflight fully redacts bounded synthetic private local paths', () => {
   const fixtures = [
     {
