@@ -120,6 +120,7 @@ const DETECTORS: Detector[] = [
     severity: 'warning',
     pattern: credentialAssignmentPattern,
     advice: 'Review the value manually. It may be a placeholder, but do not share it publicly until confirmed safe.',
+    redaction: '[credential-assignment]',
   },
   {
     id: 'email-like',

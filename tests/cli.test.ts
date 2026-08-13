@@ -100,11 +100,14 @@ test('cli emitter redacts separator-bearing credential assignments end to end', 
   assert.equal(packet.preflight.status, 'warning');
   assert.ok(packet.preflight.findings.some((finding) => finding.id === 'credential-assignment-like'));
   assert.equal(JSON.stringify(packet).includes(syntheticValue), false);
+  assert.equal(JSON.stringify(packet).includes(syntheticValue.slice(-4)), false);
 
   const exitCode = emitPacket(packet, (text) => { stdout += text; }, (text) => { stderr += text; });
 
   assert.equal(exitCode, 0);
   assert.equal(stdout.includes(syntheticValue), false);
+  assert.equal(stdout.includes(syntheticValue.slice(-4)), false);
+  assert.match(stdout, /\[credential-assignment\]/);
   assert.match(stdout, /Preflight: warning/);
   assert.equal(stderr, '');
 });
