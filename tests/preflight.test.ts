@@ -199,10 +199,14 @@ test('preflight warns and redacts separator-bearing synthetic credential assignm
 
     assert.equal(result.status, 'warning');
     assert.ok(result.findings.some((finding) => finding.id === 'credential-assignment-like'));
+    assert.equal(
+      result.findings.find((finding) => finding.id === 'credential-assignment-like')?.excerpt,
+      '[credential-assignment]',
+    );
     assert.equal(JSON.stringify(result).includes(syntheticValue), false);
     assert.equal(redacted.includes(syntheticValue), false);
-    assert.notEqual(redacted, source);
-    assert.match(redacted, /; keep this sentence\.$/);
+    assert.equal(redacted, '[credential-assignment]; keep this sentence.');
+    assert.equal(redacted.includes(syntheticValue.slice(-4)), false);
   }
 
   const separatorFreeValue = ['invalid', 'synthetic', 'value', 'A'.repeat(12)].join('');
@@ -211,6 +215,8 @@ test('preflight warns and redacts separator-bearing synthetic credential assignm
 
   assert.equal(separatorFreeResult.status, 'warning');
   assert.equal(redactSensitiveText(separatorFreeSource).includes(separatorFreeValue), false);
+  assert.equal(redactSensitiveText(separatorFreeSource), '[credential-assignment]');
+  assert.equal(JSON.stringify(separatorFreeResult).includes(separatorFreeValue.slice(-4)), false);
   assert.equal(runPreflight('token = use/the documented placeholder').status, 'pass');
 });
 
