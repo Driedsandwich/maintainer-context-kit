@@ -177,9 +177,9 @@ export function buildSyntheticTriagePacket(generatedAt: string = new Date().toIS
     technicalSurface: ['CLI command routing.', 'User-facing error message.', 'Help text and runbook documentation.'],
     riskChecklist: ['Confirm the requested behavior is within v0.1 scope.', 'Confirm no GitHub write operation is needed.', 'Confirm no external LLM API call is needed.', 'Confirm the issue does not contain sensitive data before sharing externally.'],
     intakeQualityCheck: ['Reproduction steps: partial; command name is present but exact command line should be confirmed.', 'Expected behavior: present.', 'Actual behavior: present.', 'Environment: present but minimal.', 'Specificity: actionable for a small CLI messaging PR.', 'Security claim evidence: not applicable; no security claim is made.', 'Sensitive-data exposure: no obvious sensitive data in this synthetic fixture.'],
-    codexTaskPrompt: 'Use this triage packet to decide the smallest safe implementation step. Do not write to GitHub, do not call external LLM APIs, and preserve v0.1 scope.',
+    codexTaskPrompt: 'Use this synthetic packet only to verify triage structure and safety wording. Do not implement from its synthetic claims.',
     verificationPlan: [UNCONFIRMED_REPOSITORY_VERIFICATION, 'Re-run mck triage --demo using the documented local CLI invocation.', 'Confirm output includes intake quality checks.', 'Confirm preflight result and limitation wording are present.'],
-    handoffNotes: ['This is a synthetic demo packet for validating issue-focused triage structure.', 'Real issue collection should be added in a later PR after masking and body/comment boundaries are reviewed.'],
+    handoffNotes: ['This is a synthetic demo packet for validating issue-focused triage structure.', 'Real read-only issue collection is available through mck triage <issue-number-or-url>; this fixture does not exercise it.'],
     knownLimitations: ['Synthetic demo only.', 'Does not inspect actual GitHub issues or comments.', 'Does not perform duplicate detection.', 'Does not prove the packet is safe to share publicly.'],
     preflight,
   };

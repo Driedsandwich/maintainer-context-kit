@@ -88,6 +88,8 @@ test('synthetic review rendering includes review-specific sections', () => {
   assert.match(markdown, /# Maintainer Task Packet: review - synthetic\/demo-repository#202/);
   assert.match(markdown, /## 9\. Risk Checklist/);
   assert.match(markdown, /This preflight is best-effort/);
+  assert.match(markdown, /Real read-only PR collection is available through mck review/);
+  assert.doesNotMatch(markdown, /Real PR collection should be added/i);
 });
 
 test('pull request review packet collects read-only PR details', () => {

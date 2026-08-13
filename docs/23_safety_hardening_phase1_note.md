@@ -2,6 +2,8 @@
 
 Date: 2026-07-06
 
+> Historical evidence. This note records an earlier private-iteration checkpoint. See [Current status](03_status.md) for the current public-preview posture.
+
 ## Status
 
 Safety Hardening Phase 1 is recorded for the current private-iteration state.

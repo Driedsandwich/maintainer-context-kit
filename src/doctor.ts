@@ -38,6 +38,7 @@ export type DoctorReport = {
 
 export type DoctorOptions = {
   cwd?: string;
+  nodeVersion?: string;
   runCommand?: ReadOnlyCommandRunner;
 };
 
@@ -48,9 +49,17 @@ type GhRepoView = {
   defaultBranchRef?: { name?: string } | null;
 };
 
-function getNodeMajor(version: string): number {
-  const match = /^v?(\d+)/.exec(version);
-  return match ? Number(match[1]) : 0;
+function supportsRequiredNodeVersion(version: string): boolean {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)/.exec(version);
+  if (!match) {
+    return false;
+  }
+
+  const [, majorText, minorText, patchText] = match;
+  const [major, minor, patch] = [majorText, minorText, patchText].map(Number);
+
+  return major > 24
+    || (major === 24 && (minor > 12 || (minor === 12 && patch >= 0)));
 }
 
 function commandText(argv: readonly string[]): string {
@@ -165,17 +174,17 @@ function summarizeGitCurrentBranch(stdout: string): { status: DoctorStatus; deta
 }
 
 export function buildDoctorReport(options: DoctorOptions = {}): DoctorReport {
-  const nodeMajor = getNodeMajor(process.version);
-  const supportsNativeTypeStripping = nodeMajor >= 24;
+  const nodeVersion = options.nodeVersion ?? process.version;
+  const supportsRuntime = supportsRequiredNodeVersion(nodeVersion);
   const runCommand = options.runCommand ?? runReadOnlyCommand;
 
   const checks: DoctorCheck[] = [
     {
       name: 'node-runtime',
-      status: supportsNativeTypeStripping ? 'pass' : 'warn',
-      detail: supportsNativeTypeStripping
-        ? 'Node runtime is expected to support native TypeScript type stripping for this scaffold.'
-        : 'Node runtime may not support native TypeScript type stripping. Use Node 24.12.0 or newer for this scaffold.',
+      status: supportsRuntime ? 'pass' : 'warn',
+      detail: supportsRuntime
+        ? 'Node runtime satisfies the documented minimum of 24.12.0.'
+        : 'Node runtime is below or could not be compared with the documented minimum. Use Node 24.12.0 or newer.',
     },
     {
       name: 'github-write-scope',
@@ -190,7 +199,7 @@ export function buildDoctorReport(options: DoctorOptions = {}): DoctorReport {
     {
       name: 'package-publication',
       status: 'pass',
-      detail: 'Package publication is disabled for this private bootstrap scaffold.',
+      detail: 'No npm publication path is provided for this OSS preview.',
     },
     checkCommand(
       'git-version',
@@ -262,14 +271,14 @@ export function buildDoctorReport(options: DoctorOptions = {}): DoctorReport {
       packagePublicationAllowed: false,
     },
     runtime: {
-      node: process.version,
+      node: nodeVersion,
       platform: process.platform,
       arch: process.arch,
       cwd: '<local-cwd>',
     },
     checks,
     limitations: [
-      'This doctor command is a read-only environment diagnostic; it does not generate Maintainer Task Packets yet.',
+      'This doctor command is a read-only environment diagnostic; packet generation is handled by handoff, triage, and review.',
       'Native TypeScript execution relies on erasable TypeScript syntax only; no compile-time type checking is performed by Node type stripping.',
       'gh and git checks depend on the local environment and may warn or fail without stopping the CLI.',
       'No GitHub write operation or external LLM API call is performed by doctor.',

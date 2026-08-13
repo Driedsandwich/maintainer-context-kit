@@ -79,6 +79,8 @@ test('synthetic handoff rendering includes required sections', () => {
   assert.match(markdown, /## 15\. Known Limitations/);
   assert.match(markdown, /This preflight is best-effort/);
   assert.match(markdown, /Preflight: pass/);
+  assert.match(markdown, /Real repository collection is available through mck handoff without --demo/);
+  assert.doesNotMatch(markdown, /next real feature should collect repository context/i);
 });
 
 test('repository handoff packet summarizes read-only repo context', () => {

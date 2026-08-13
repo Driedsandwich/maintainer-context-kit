@@ -82,6 +82,8 @@ test('synthetic triage rendering includes intake quality checks', () => {
   assert.match(markdown, /Sensitive-data exposure/);
   assert.match(markdown, /This preflight is best-effort/);
   assert.match(markdown, /Preflight: pass/);
+  assert.match(markdown, /Real read-only issue collection is available through mck triage/);
+  assert.doesNotMatch(markdown, /Real issue collection should be added/i);
 });
 
 test('issue triage packet collects read-only issue details', () => {

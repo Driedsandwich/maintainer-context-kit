@@ -1,5 +1,7 @@
 # Repository-aware verification plan 検証記録 — 2026-07-15
 
+> **履歴資料:** 以下のPRIVATE CONTINUE／DISTRIBUTION HOLD判定は当時の検証判断です。現在の公開状態と保守方針は[Current status](03_status.md)を正本とします。修正結果と限界は履歴証拠として保持します。
+
 Date: 2026-07-15 JST
 MCK base ref: `f7d48246ddb3f7c1af83a7f7644f1f1fd144bd6d`
 Public target ref: `0df077f722583a36f519e5243404b78d7b4ad47a`

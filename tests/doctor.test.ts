@@ -69,6 +69,16 @@ test('doctor report preserves v0.1 safety mode', () => {
   assert.equal(report.mode.packagePublicationAllowed, false);
 });
 
+test('doctor enforces the documented Node 24.12.0 minimum', () => {
+  const below = buildDoctorReport({ nodeVersion: 'v24.11.9', runCommand: fakeRunner });
+  const minimum = buildDoctorReport({ nodeVersion: 'v24.12.0', runCommand: fakeRunner });
+  const newerMajor = buildDoctorReport({ nodeVersion: 'v25.0.0', runCommand: fakeRunner });
+
+  assert.equal(below.checks.find((check) => check.name === 'node-runtime')?.status, 'warn');
+  assert.equal(minimum.checks.find((check) => check.name === 'node-runtime')?.status, 'pass');
+  assert.equal(newerMajor.checks.find((check) => check.name === 'node-runtime')?.status, 'pass');
+});
+
 test('doctor report includes read-only environment diagnostics', () => {
   const report = buildDoctorReport({ runCommand: fakeRunner });
   const names = report.checks.map((check) => check.name);
